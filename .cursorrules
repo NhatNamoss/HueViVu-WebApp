@@ -1,0 +1,30 @@
+# QUY TẮC BẮT BUỘC CHO AI LẬP TRÌNH (AI RULES)
+Dự án: HueViVu - Trợ lý Du lịch Văn hóa AI (Premium AI Travel Companion).
+
+## 1. MỤC TIÊU SẢN PHẨM (PRODUCT IDENTITY)
+- Đây là một AI Companion, không phải website du lịch bình thường.
+- Giao diện phải mượt mà (smooth), điện ảnh (cinematic) và có tính khám phá cao.
+- Tránh các form cứng nhắc, thay vào đó dùng tương tác dạng hội thoại (conversational).
+
+## 2. QUY TẮC CHỐNG TRÙNG LẶP CODE (CRITICAL)
+Trước khi tạo MỚI bất kỳ UI Component nào (Button, Card, Input) hoặc Hàm tiện ích (Utility), AI bắt buộc phải:
+1. Đọc file `COMPONENTS_REGISTRY.md` ở thư mục gốc.
+2. Dùng chức năng search/grep trong thư mục `src/components` và `src/lib`.
+- NẾU ĐÃ CÓ: Bắt buộc tái sử dụng.
+- NẾU CHƯA CÓ: Được phép tạo mới, nhưng PHẢI yêu cầu người dùng cập nhật thông tin vào `COMPONENTS_REGISTRY.md` sau khi tạo xong.
+
+## 3. KIẾN TRÚC THƯ MỤC
+- `src/components/ui/`: Chứa các component giao diện cơ bản (dùng chung cho toàn app).
+- `src/components/layout/`: Chứa header, footer, navigation.
+- `src/components/features/`: Chứa các component nghiệp vụ phức tạp (ví dụ: AiItineraryForm).
+- `src/lib/`: Chứa logic gọi API, xử lý data (vd: `ai.ts`).
+- `src/types/`: Khai báo Type/Interface dùng chung. KHÔNG khai báo rải rác trong các file page.
+
+## 4. QUY TẮC UI/UX (Dựa trên QA Report)
+- TẤT CẢ hình ảnh (`<Image>`) phải có `alt` chuẩn và ảnh mặc định (fallback) khi lỗi. Tuyệt đối không để ảnh bị vỡ (broken image) làm hỏng layout.
+- Hạn chế text quá dài làm tràn thẻ (card). Định dạng giá tiền gọn gàng (VD: "20.000đ" hoặc "Liên hệ").
+- Luôn thêm hiệu ứng micro-animations: thêm `hover:scale-[1.02] transition-transform duration-300` vào các thẻ (card) hoặc nút bấm có thể tương tác.
+- Luôn sử dụng trạng thái Skeleton (khung xương mờ) khi loading dữ liệu.
+
+---
+AI: BẠN ĐÃ ĐỌC VÀ HIỂU RÕ CÁC QUY TẮC NÀY. HÃY TUÂN THỦ NGHIÊM NGẶT ĐỂ TRÁNH CONFLICT CODE GIỮA NHIỀU DEVELOPER.

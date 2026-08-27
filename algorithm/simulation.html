@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>State-Space Bidirectional A* Simulation</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1e1e2e; color: #cdd6f4; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        h2 { margin-bottom: 5px; color: #89b4fa; text-align: center; }
+        p { margin-top: 0; color: #a6adc8; max-width: 650px; text-align: center; font-size: 14px; line-height: 1.5; }
+        .controls { margin-bottom: 20px; display: flex; gap: 10px; }
+        button { background: #89b4fa; color: #1e1e2e; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 15px; transition: 0.2s; }
+        button:hover { background: #b4befe; transform: scale(1.05); }
+        button:disabled { background: #45475a; color: #a6adc8; cursor: not-allowed; transform: none; }
+        
+        .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin-bottom: 20px; font-size: 13px; max-width: 800px; background: #313244; padding: 10px 20px; border-radius: 8px;}
+        .legend-item { display: flex; align-items: center; gap: 5px; }
+        .legend-box { width: 16px; height: 16px; border-radius: 4px; }
+        
+        #grid { display: grid; grid-template-columns: repeat(20, 30px); grid-template-rows: repeat(20, 30px); gap: 2px; background: #181825; padding: 10px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .cell { width: 30px; height: 30px; background: #313244; border-radius: 4px; transition: background-color 0.1s ease; position: relative; display: flex; align-items: center; justify-content: center;}
+        
+        .start { background: #a6e3a1; box-shadow: 0 0 10px #a6e3a1; z-index: 2; }
+        .end { background: #f38ba8; box-shadow: 0 0 10px #f38ba8; z-index: 2; }
+        .poi { background: #f9e2af; border-radius: 50%; width: 20px; height: 20px; box-shadow: 0 0 15px #f9e2af; z-index: 4; position: absolute; }
+        .poi-visited { background: #fab387; box-shadow: 0 0 20px #fab387; transform: scale(1.2); transition: 0.3s; }
+        
+        .corridor { background: #45475a; }
+        
+        /* Different intensities based on state */
+        .wave-start { background: #81c8be; opacity: 0.8; }
+        .wave-end { background: #eba0ac; opacity: 0.8; }
+        .wave-poi-boost { background: #94e2d5 !important; box-shadow: 0 0 10px #94e2d5; z-index: 3;} 
+        
+        .intersect { background: #cba6f7 !important; box-shadow: 0 0 20px #cba6f7; z-index: 10;}
+        .path { background: #f9e2af; box-shadow: 0 0 10px #f9e2af; z-index: 5; border-radius: 50%; width: 10px; height: 10px;}
+        .path-line { background: #f9e2af; z-index: 4; }
+    </style>
+</head>
+<body>
+    <h2>Mô phỏng: State-Space Heuristic Bidirectional BFS</h2>
+    <p>
+        Bản mô phỏng này áp dụng <b>Trạng thái (State)</b>: Mỗi nhánh nhớ tọa độ + các POI đã gom.<br>
+        Nhờ dùng <b>Hàng đợi ưu tiên (Heuristic A*)</b>, thuật toán bị "hút" về phía các điểm vàng. Nó sẽ uốn lượn để bốc các POI thay vì đi thẳng mạch từ Start đến End.
+    </p>
+    
+    <div class="legend">
+        <div class="legend-item"><div class="legend-box start"></div> Start</div>
+        <div class="legend-item"><div class="legend-box end"></div> End</div>
+        <div class="legend-item"><div class="legend-box" style="background:#f9e2af; border-radius:50%;"></div> POI chưa bốc</div>
+        <div class="legend-item"><div class="legend-box" style="background:#fab387; border-radius:50%;"></div> POI đã bốc</div>
+        <div class="legend-item"><div class="legend-box corridor"></div> Corridor</div>
+        <div class="legend-item"><div class="legend-box wave-start"></div> Loang Start</div>
+        <div class="legend-item"><div class="legend-box wave-end"></div> Loang End</div>
+        <div class="legend-item"><div class="legend-box path"></div> Lộ trình tối ưu</div>
+    </div>
+    
+    <div class="controls">
+        <button id="btn-start" onclick="startSimulation()">Bắt đầu Gom Điểm</button>
+        <button onclick="resetGrid()">Làm mới</button>
+    </div>
+    
+    <div id="grid"></div>
+
+    <script>
+        const GRID_SIZE = 20;
+        const gridEl = document.getElementById('grid');
+        let cells = [];
+        let startPos = {x: 2, y: 2};
+        let endPos = {x: 17, y: 17};
+        let pois = [ {x: 6, y: 6}, {x: 13, y: 4}, {x: 9, y: 11}, {x: 15, y: 12} ]; // 4 POIs
+        const TARGET_POIS = 3; // Must collect at least 3 POIs to succeed
+        
+        let qStart = [];
+        let qEnd = [];
+        let visitedStart = new Map(); // Key: "x-y-mask" -> { prevKey, time }
+        let visitedEnd = new Map();
+        let simInterval;
+        let isRunning = false;
+
+        function getCellIndex(x, y) { return y * GRID_SIZE + x; }
+        function getPosFromKey(key) { const parts = key.split('-'); return {x: parseInt(parts[0]), y: parseInt(parts[1]), mask: parseInt(parts[2])}; }
+        function getKey(x, y, mask) { return `${x}-${y}-${mask}`; }
+        function inBounds(x, y) { return x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE; }
+        
+        function inCorridor(x, y) {
+            return x >= startPos.x - 2 && x <= endPos.x + 2 && y >= startPos.y - 2 && y <= endPos.y + 2;
+        }
+
+        function getPoiIndex(x, y) {
+            return pois.findIndex(p => p.x === x && p.y === y);
+        }
+
+        function countBits(n) {
+            let count = 0;
+            while (n) { count += n & 1; n >>= 1; }
+            return count;
+        }
+
+        function initGrid() {
+            gridEl.innerHTML = '';
+            cells = [];
+            for (let y = 0; y < GRID_SIZE; y++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.x = x;
+                    cell.dataset.y = y;
+                    
+                    if (inCorridor(x, y)) cell.classList.add('corridor');
+                    if (x === startPos.x && y === startPos.y) cell.classList.add('start');
+                    if (x === endPos.x && y === endPos.y) cell.classList.add('end');
+                    
+                    let poiIdx = getPoiIndex(x, y);
+                    if (poiIdx !== -1) {
+                        const poiEl = document.createElement('div');
+                        poiEl.className = 'poi';
+                        poiEl.id = `poi-${poiIdx}`;
+                        cell.appendChild(poiEl);
+                    }
+                    
+                    gridEl.appendChild(cell);
+                    cells.push(cell);
+                }
+            }
+        }
+
+        function resetGrid() {
+            clearInterval(simInterval);
+            isRunning = false;
+            document.getElementById('btn-start').disabled = false;
+            initGrid();
+        }
+
+        function startSimulation() {
+            if (isRunning) return;
+            isRunning = true;
+            document.getElementById('btn-start').disabled = true;
+            
+            // State: { x, y, mask, time }
+            let startState = {x: startPos.x, y: startPos.y, mask: 0, time: 0};
+            let endState = {x: endPos.x, y: endPos.y, mask: 0, time: 0};
+            
+            qStart = [startState];
+            qEnd = [endState];
+            visitedStart.clear();
+            visitedEnd.clear();
+            
+            visitedStart.set(getKey(startState.x, startState.y, 0), {prevKey: null, time: 0});
+            visitedEnd.set(getKey(endState.x, endState.y, 0), {prevKey: null, time: 0});
+
+            simInterval = setInterval(step, 60);
+        }
+
+        const dirs = [[0,1], [1,0], [0,-1], [-1,0]];
+
+        // A* Heuristic scoring function for Priority Queue
+        // We want to minimize time, but massively reward collecting POIs
+        function getScore(state) {
+            // Base cost is time. Bonus for each POI collected is -40.
+            return state.time - (countBits(state.mask) * 40);
+        }
+
+        function expandWave(queue, visitedMap, otherVisitedMap, waveClass) {
+            let intersectPoint = null;
+            
+            // Sort to simulate Priority Queue (Heuristic A*)
+            queue.sort((a, b) => getScore(a) - getScore(b));
+            
+            // Process a batch of top states to animate smoothly
+            let batchSize = Math.min(10, queue.length);
+            
+            for(let i=0; i<batchSize; i++) {
+                let curr = queue.shift();
+                
+                for (let d of dirs) {
+                    let nx = curr.x + d[0], ny = curr.y + d[1];
+                    if (!inBounds(nx, ny) || !inCorridor(nx, ny)) continue;
+                    
+                    let nMask = curr.mask;
+                    let poiIdx = getPoiIndex(nx, ny);
+                    if (poiIdx !== -1) {
+                        nMask |= (1 << poiIdx); // Set bit for this POI
+                    }
+                    
+                    let nKey = getKey(nx, ny, nMask);
+                    
+                    if (!visitedMap.has(nKey)) {
+                        visitedMap.set(nKey, {prevKey: getKey(curr.x, curr.y, curr.mask), time: curr.time + 1});
+                        queue.push({x: nx, y: ny, mask: nMask, time: curr.time + 1});
+                        
+                        // Visually color cell
+                        let cellEl = cells[getCellIndex(nx, ny)];
+                        if(!cellEl.classList.contains('start') && !cellEl.classList.contains('end')) {
+                            // If this state has collected POIs, show stronger color to represent "pull"
+                            if (countBits(nMask) > 0) cellEl.classList.add('wave-poi-boost');
+                            else cellEl.classList.add(waveClass);
+                        }
+
+                        // Check intersection with the OTHER wave
+                        // They intersect at (nx, ny). The combined masks must have >= TARGET_POIS
+                        for (let [otherKey, otherVal] of otherVisitedMap.entries()) {
+                            let [ox, oy, oMask] = otherKey.split('-');
+                            if (parseInt(ox) === nx && parseInt(oy) === ny) {
+                                let combinedMask = nMask | parseInt(oMask);
+                                if (countBits(combinedMask) >= TARGET_POIS) {
+                                    intersectPoint = {
+                                        x: nx, y: ny, 
+                                        maskStart: (waveClass === 'wave-start') ? nMask : parseInt(oMask),
+                                        maskEnd: (waveClass === 'wave-start') ? parseInt(oMask) : nMask
+                                    };
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                if (intersectPoint) break;
+            }
+            return intersectPoint;
+        }
+
+        function step() {
+            // Expand Start Wave
+            let intersect1 = expandWave(qStart, visitedStart, visitedEnd, 'wave-start');
+            if (intersect1) { finishSimulation(intersect1); return; }
+
+            // Expand End Wave
+            let intersect2 = expandWave(qEnd, visitedEnd, visitedStart, 'wave-end');
+            if (intersect2) { finishSimulation(intersect2); return; }
+            
+            if (qStart.length === 0 && qEnd.length === 0) {
+                clearInterval(simInterval);
+                alert("Không tìm thấy đường thỏa mãn điều kiện gom đủ POI!");
+            }
+        }
+
+        function finishSimulation(intersect) {
+            clearInterval(simInterval);
+            let cellEl = cells[getCellIndex(intersect.x, intersect.y)];
+            cellEl.classList.add('intersect');
+            
+            // Draw path back to start and end
+            setTimeout(() => {
+                drawPath(intersect.x, intersect.y, intersect.maskStart, visitedStart);
+                drawPath(intersect.x, intersect.y, intersect.maskEnd, visitedEnd);
+            }, 300);
+        }
+
+        function drawPath(startX, startY, startMask, visitedMap) {
+            let currKey = getKey(startX, startY, startMask);
+            
+            let drawInterval = setInterval(() => {
+                if (!currKey || currKey === "null") {
+                    clearInterval(drawInterval);
+                    return;
+                }
+                
+                let pos = getPosFromKey(currKey);
+                let cellEl = cells[getCellIndex(pos.x, pos.y)];
+                
+                if (!cellEl.classList.contains('start') && !cellEl.classList.contains('end')) {
+                    // Highlight POI if this cell contains one
+                    let poiIdx = getPoiIndex(pos.x, pos.y);
+                    if (poiIdx !== -1) {
+                        document.getElementById(`poi-${poiIdx}`).classList.add('poi-visited');
+                    } else {
+                        // Draw path dot
+                        const dot = document.createElement('div');
+                        dot.className = 'path';
+                        cellEl.appendChild(dot);
+                        cellEl.classList.add('path-line');
+                    }
+                }
+                
+                let stateData = visitedMap.get(currKey);
+                if (stateData) currKey = stateData.prevKey;
+                else currKey = null;
+                
+            }, 80);
+        }
+
+        initGrid();
+    </script>
+</body>
+</html>

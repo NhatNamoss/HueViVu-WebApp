@@ -127,6 +127,16 @@ function createSchema(db: Database.Database) {
       created_at TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS feedback (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      topic TEXT NOT NULL,
+      message TEXT NOT NULL,
+      email TEXT,
+      rating INTEGER,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS user_events (
       id          TEXT PRIMARY KEY,
       user_id     TEXT,
@@ -168,6 +178,8 @@ function createSchema(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_feedback_trip ON trip_feedback(trip_id);
     CREATE INDEX IF NOT EXISTS idx_training_reward ON training_examples(reward DESC);
   `);
+
+  addColumnIfMissing(db, 'training_examples', 'image_url', 'TEXT');
 
   addColumnIfMissing(db, 'places', 'indoor',         'INTEGER DEFAULT 0');
   addColumnIfMissing(db, 'places', 'best_time',      "TEXT DEFAULT 'all'");

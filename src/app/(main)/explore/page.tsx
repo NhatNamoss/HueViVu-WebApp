@@ -1,5 +1,6 @@
-'use client';
-import { useEffect, useState } from 'react';
+﻿'use client';
+import { useEffect, useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import PlaceCard from '@/components/ui/PlaceCard';
 import CategoryFilter from '@/components/ui/CategoryFilter';
@@ -21,14 +22,79 @@ const CATEGORIES = [
   { key: 'market', label: '🛍️ Chợ' },
 ];
 
-export default function ExplorePage() {
+const MOODS = [
+  { key: 'all', label: 'Tất cả', emoji: '🌟' },
+  { key: 'calm', label: 'Yên tĩnh', emoji: '🍵' },
+  { key: 'lively', label: 'Vui vẻ', emoji: '🎉' },
+  { key: 'cultural', label: 'Văn hóa', emoji: '🏛️' },
+  { key: 'food', label: 'Ăn ngon', emoji: '🍜' },
+  { key: 'spontaneous', label: 'Ngẫu hứng', emoji: '✨' },
+];
+
+const MOOD_CATEGORY_MAP: Record<string, string> = {
+  calm: 'cafe',
+  lively: 'market',
+  cultural: 'heritage',
+  food: 'food',
+  spontaneous: 'all',
+};
+
+// Minimal markdown renderer: **bold**, - bullets, newlines
+function renderAiMarkdown(text: string) {
+  const lines = text.split('\n');
+  const out: React.ReactNode[] = [];
+  let key = 0;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) { out.push(<br key={key++} />); continue; }
+    const isBullet = /^[-*•]\s+/.test(trimmed);
+    const content = trimmed.replace(/^[-*•]\s+/, '');
+    // parse **bold**
+    const parts = content.split(/(\*\*[^*]+\*\*)/g).map((p, i) =>
+      p.startsWith('**') ? <strong key={i}>{p.slice(2, -2)}</strong> : p
+    );
+    if (isBullet) {
+      out.push(<div key={key++} style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
+        <span style={{ color: 'var(--coral)', flexShrink: 0, marginTop: 1 }}>•</span>
+        <span>{parts}</span>
+      </div>);
+    } else {
+      out.push(<p key={key++} style={{ margin: '0 0 6px', lineHeight: 1.6 }}>{parts}</p>);
+    }
+  }
+  return out;
+}
+
+function ExploreInner() {
+  const searchParams = useSearchParams();
   const [places, setPlaces] = useState<Place[]>([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState('all');
+  const [activeMood, setActiveMood] = useState('all');
   const [q, setQ] = useState('');
   const [weather, setWeather] = useState<any>(null);
   const [aiResponse, setAiResponse] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
+
+  // Read URL params on mount: ?cat=cafe or ?time=morning
+  useEffect(() => {
+    const cat = searchParams.get('cat');
+    const time = searchParams.get('time');
+    if (cat && cat !== 'all') setCategory(cat);
+    else if (time) {
+      // map time-of-day to relevant category
+      const timeMap: Record<string, string> = {
+        morning: 'heritage', afternoon: 'cafe', evening: 'food',
+      };
+      if (timeMap[time]) setCategory(timeMap[time]);
+    }
+  }, [searchParams]);
+
+  const handleMoodSelect = (moodKey: string) => {
+    setActiveMood(moodKey);
+    if (moodKey !== 'all') setCategory(MOOD_CATEGORY_MAP[moodKey] || 'all');
+    else setCategory('all');
+  };
 
   const handleAiSearch = async () => {
     if (!q.trim()) return;
@@ -69,7 +135,12 @@ export default function ExplorePage() {
     <>
       {/* Header */}
       <header className="page-header">
-        <h1 className="page-header-title">Khám phá</h1>
+        <div>
+          <p className="section-eyebrow" style={{ marginBottom: 2 }}>Tìm kiếm</p>
+          <h1 style={{ fontSize: '1.375rem', fontWeight: 600, color: 'var(--navy)' }}>
+            Hôm nay muốn <em style={{ color: 'var(--coral)' }}>cảm nhận</em> gì?
+          </h1>
+        </div>
         <button className="header-btn" aria-label="Map view">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
@@ -78,8 +149,24 @@ export default function ExplorePage() {
         </button>
       </header>
 
+      {/* Mood filter */}
+      <div style={{ padding: '14px 20px 0' }}>
+        <p style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--navy-muted)', marginBottom: 10 }}>Tôi đang muốn...</p>
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+          {MOODS.map(mood => (
+            <button
+              key={mood.key}
+              onClick={() => handleMoodSelect(mood.key)}
+              className={`mood-chip${activeMood === mood.key ? ' active' : ''}`}
+            >
+              {mood.emoji} {mood.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* AI Conversational Input */}
-      <div style={{ padding: '12px 20px' }}>
+      <div style={{ padding: '14px 20px 0' }}>
         <div style={{ background: 'white', border: '1px solid rgba(26,29,59,0.1)', borderRadius: 'var(--radius-lg)', padding: '6px', display: 'flex', alignItems: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
           <div style={{ padding: '10px 12px', color: 'var(--coral)', fontSize: '1.2rem' }}>✨</div>
           <input 
@@ -96,8 +183,9 @@ export default function ExplorePage() {
           </button>
         </div>
         {aiResponse && (
-          <div style={{ marginTop: 12, padding: '16px', background: 'linear-gradient(135deg, rgba(255,127,107,0.08), rgba(255,154,92,0.06))', border: '1px solid rgba(255,127,107,0.15)', borderRadius: 'var(--radius-md)', fontSize: '0.875rem', color: 'var(--navy)', lineHeight: 1.5 }}>
-            <p><strong>HueViVu AI:</strong> {aiResponse}</p>
+          <div style={{ marginTop: 12, padding: '16px', background: 'linear-gradient(135deg, rgba(255,127,107,0.08), rgba(255,154,92,0.06))', border: '1px solid rgba(255,127,107,0.15)', borderRadius: 'var(--radius-md)', fontSize: '0.875rem', color: 'var(--navy)' }}>
+            <p style={{ fontWeight: 700, marginBottom: 8, color: 'var(--coral)', fontSize: '0.8125rem' }}>✨ HueViVu AI gợi ý</p>
+            {renderAiMarkdown(aiResponse)}
           </div>
         )}
       </div>
@@ -155,7 +243,7 @@ export default function ExplorePage() {
       <section className="section" style={{ marginBottom: 100 }}>
         <div className="section-header">
           <h2 className="section-title">
-            {category === 'all' ? '✨ Tất cả địa điểm' : CATEGORIES.find(c => c.key === category)?.label}
+            {category === 'all' ? '✨ Tất cả địa điểm' : CATEGORIES.find(c => c.key === category)?.label ?? '🌟 Địa điểm'}
           </h2>
           <span style={{ fontSize: '0.8125rem', color: 'var(--navy-muted)' }}>{places.length} nơi</span>
         </div>
@@ -172,15 +260,27 @@ export default function ExplorePage() {
               <PlaceCard key={place.id} place={place} layout="grid" />
             ))}
             {places.length === 0 && (
-              <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '40px 20px', color: 'var(--navy-muted)' }}>
-                <p style={{ fontSize: '2rem', marginBottom: 8 }}>🔍</p>
-                <p style={{ fontWeight: 600 }}>Không tìm thấy địa điểm</p>
-                <p style={{ fontSize: '0.875rem', marginTop: 4 }}>Thử từ khóa khác hoặc danh mục khác</p>
+              <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '48px 20px', color: 'var(--navy-muted)' }}>
+                <p className="animate-float" style={{ fontSize: '2.5rem', marginBottom: 12 }}>🔍</p>
+                <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--navy)', marginBottom: 6 }}>
+                  Huế còn nhiều góc nhỏ khác...
+                </h3>
+                <p style={{ fontSize: '0.875rem', color: 'var(--navy-muted)', lineHeight: 1.6, marginBottom: 16 }}>
+                  AI có thể gợi ý thêm không? Chỉ cần nói cảm giác bạn muốn ở trên kia.
+                </p>
               </div>
             )}
           </div>
         )}
       </section>
     </>
+  );
+}
+
+export default function ExplorePage() {
+  return (
+    <Suspense fallback={null}>
+      <ExploreInner />
+    </Suspense>
   );
 }

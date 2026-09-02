@@ -1,286 +1,229 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>State-Space Bidirectional A* Simulation</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #1e1e2e; color: #cdd6f4; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        h2 { margin-bottom: 5px; color: #89b4fa; text-align: center; }
-        p { margin-top: 0; color: #a6adc8; max-width: 650px; text-align: center; font-size: 14px; line-height: 1.5; }
-        .controls { margin-bottom: 20px; display: flex; gap: 10px; }
-        button { background: #89b4fa; color: #1e1e2e; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 15px; transition: 0.2s; }
-        button:hover { background: #b4befe; transform: scale(1.05); }
-        button:disabled { background: #45475a; color: #a6adc8; cursor: not-allowed; transform: none; }
-        
-        .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 15px; margin-bottom: 20px; font-size: 13px; max-width: 800px; background: #313244; padding: 10px 20px; border-radius: 8px;}
-        .legend-item { display: flex; align-items: center; gap: 5px; }
-        .legend-box { width: 16px; height: 16px; border-radius: 4px; }
-        
-        #grid { display: grid; grid-template-columns: repeat(20, 30px); grid-template-rows: repeat(20, 30px); gap: 2px; background: #181825; padding: 10px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .cell { width: 30px; height: 30px; background: #313244; border-radius: 4px; transition: background-color 0.1s ease; position: relative; display: flex; align-items: center; justify-content: center;}
-        
-        .start { background: #a6e3a1; box-shadow: 0 0 10px #a6e3a1; z-index: 2; }
-        .end { background: #f38ba8; box-shadow: 0 0 10px #f38ba8; z-index: 2; }
-        .poi { background: #f9e2af; border-radius: 50%; width: 20px; height: 20px; box-shadow: 0 0 15px #f9e2af; z-index: 4; position: absolute; }
-        .poi-visited { background: #fab387; box-shadow: 0 0 20px #fab387; transform: scale(1.2); transition: 0.3s; }
-        
-        .corridor { background: #45475a; }
-        
-        /* Different intensities based on state */
-        .wave-start { background: #81c8be; opacity: 0.8; }
-        .wave-end { background: #eba0ac; opacity: 0.8; }
-        .wave-poi-boost { background: #94e2d5 !important; box-shadow: 0 0 10px #94e2d5; z-index: 3;} 
-        
-        .intersect { background: #cba6f7 !important; box-shadow: 0 0 20px #cba6f7; z-index: 10;}
-        .path { background: #f9e2af; box-shadow: 0 0 10px #f9e2af; z-index: 5; border-radius: 50%; width: 10px; height: 10px;}
-        .path-line { background: #f9e2af; z-index: 4; }
-    </style>
+  <meta charset="UTF-8">
+  <title>A* Simulation - HueViVu</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 20px; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+    h1 { margin-top: 0; font-size: 24px; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; }
+    button { background: #38bdf8; color: #0f172a; border: none; padding: 10px 20px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; transition: 0.2s; }
+    button:hover { background: #7dd3fc; }
+    button:disabled { background: #475569; cursor: not-allowed; }
+    #container { display: flex; flex: 1; gap: 20px; min-height: 0; }
+    .panel { background: #1e293b; border-radius: 8px; padding: 15px; overflow-y: auto; flex: 1; border: 1px solid #334155; }
+    .panel h2 { font-size: 18px; margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px; position: sticky; top: 0; background: #1e293b; }
+    .log-entry { margin-bottom: 12px; font-size: 14px; line-height: 1.5; font-family: 'Consolas', 'Courier New', monospace; border-bottom: 1px dashed #334155; padding-bottom: 8px; }
+    .log-step { color: #fcd34d; font-weight: bold; }
+    .log-info { color: #94a3b8; }
+    .log-branch { color: #6ee7b7; padding-left: 20px; }
+    .log-penalty { color: #f87171; padding-left: 20px; }
+    .log-goal { color: #34d399; font-weight: bold; font-size: 16px; margin-top: 20px; }
+    .pq-item { display: flex; justify-content: space-between; padding: 6px 10px; background: #0f172a; margin-bottom: 4px; border-radius: 4px; font-family: monospace; font-size: 13px; border-left: 3px solid #38bdf8; }
+    .pq-item .f-score { color: #f472b6; font-weight: bold; }
+  </style>
 </head>
 <body>
-    <h2>Mô phỏng: State-Space Heuristic Bidirectional BFS</h2>
-    <p>
-        Bản mô phỏng này áp dụng <b>Trạng thái (State)</b>: Mỗi nhánh nhớ tọa độ + các POI đã gom.<br>
-        Nhờ dùng <b>Hàng đợi ưu tiên (Heuristic A*)</b>, thuật toán bị "hút" về phía các điểm vàng. Nó sẽ uốn lượn để bốc các POI thay vì đi thẳng mạch từ Start đến End.
-    </p>
-    
-    <div class="legend">
-        <div class="legend-item"><div class="legend-box start"></div> Start</div>
-        <div class="legend-item"><div class="legend-box end"></div> End</div>
-        <div class="legend-item"><div class="legend-box" style="background:#f9e2af; border-radius:50%;"></div> POI chưa bốc</div>
-        <div class="legend-item"><div class="legend-box" style="background:#fab387; border-radius:50%;"></div> POI đã bốc</div>
-        <div class="legend-item"><div class="legend-box corridor"></div> Corridor</div>
-        <div class="legend-item"><div class="legend-box wave-start"></div> Loang Start</div>
-        <div class="legend-item"><div class="legend-box wave-end"></div> Loang End</div>
-        <div class="legend-item"><div class="legend-box path"></div> Lộ trình tối ưu</div>
+
+  <h1>
+    <span>Khung Mô Phỏng Thuật Toán A* (State-Space)</span>
+    <button id="btnStart">Chạy Mô Phỏng</button>
+  </h1>
+
+  <div id="container">
+    <div class="panel" id="logPanel">
+      <h2>Nhật Ký Quét (Logs)</h2>
+      <div id="logs"></div>
     </div>
     
-    <div class="controls">
-        <button id="btn-start" onclick="startSimulation()">Bắt đầu Gom Điểm</button>
-        <button onclick="resetGrid()">Làm mới</button>
+    <div class="panel" id="pqPanel" style="flex: 0.5;">
+      <h2>Hàng Đợi Ưu Tiên (Priority Queue)</h2>
+      <div id="pqList"></div>
     </div>
+  </div>
+
+  <script>
+    const places = [{"id":"dd-dt01","name":"Đại Nội Huế (Hoàng Thành)","category":"heritage","lat":16.4698,"lng":107.5784,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt02","name":"Lăng Tự Đức (Khiêm Lăng)","category":"heritage","lat":16.458,"lng":107.56,"rating":4.5,"avg_visit_min":90,"popularity":0.5,"base_score":90},{"id":"dd-dt03","name":"Lăng Khải Định (Ứng Lăng)","category":"heritage","lat":16.405,"lng":107.587,"rating":4.5,"avg_visit_min":90,"popularity":0.5,"base_score":90},{"id":"dd-dt04","name":"Lăng Minh Mạng (Hiếu Lăng)","category":"heritage","lat":16.433,"lng":107.549,"rating":4.5,"avg_visit_min":90,"popularity":0.5,"base_score":90},{"id":"dd-dt05","name":"Chùa Thiên Mụ","category":"temple","lat":16.4535,"lng":107.5467,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt06","name":"Cung An Định","category":"heritage","lat":16.464,"lng":107.587,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt07","name":"Đàn Nam Giao","category":"heritage","lat":16.449,"lng":107.579,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt08","name":"Chùa Từ Hiếu","category":"temple","lat":16.4459,"lng":107.5628,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt09","name":"Trường THPT Chuyên  Quốc Học - Huế","category":"heritage","lat":16.4627,"lng":107.5907,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt10","name":"Cầu Tràng Tiền (Trường Tiền)","category":"heritage","lat":16.4618,"lng":107.5861,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt11","name":"Chợ Đông Ba","category":"market","lat":16.468,"lng":107.593,"rating":4.5,"avg_visit_min":60,"popularity":0.5,"base_score":90},{"id":"dd-dt12","name":"Làng Hương Thủy Xuân","category":"craft_village","lat":16.443,"lng":107.569,"rating":4.5,"avg_visit_min":90,"popularity":0.5,"base_score":90},{"id":"dd-dt13","name":"Cầu Ngói Thanh Toàn","category":"heritage","lat":16.417,"lng":107.634,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt14","name":"Đồi Vọng Cảnh","category":"nature","lat":16.438,"lng":107.559,"rating":4.5,"avg_visit_min":45,"popularity":0.5,"base_score":90},{"id":"dd-dt15","name":"Phu Văn Lâu","category":"heritage","lat":16.4661,"lng":107.5812,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt16","name":"Nghinh Lương Đình","category":"heritage","lat":16.4665,"lng":107.5815,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt17","name":"Lăng Đồng Khánh","category":"heritage","lat":16.451,"lng":107.567,"rating":4.5,"avg_visit_min":90,"popularity":0.5,"base_score":90},{"id":"dd-dt18","name":"Lăng Thiệu Trị","category":"heritage","lat":16.42,"lng":107.57,"rating":4.5,"avg_visit_min":90,"popularity":0.5,"base_score":90},{"id":"dd-dt19","name":"Lăng Dục Đức","category":"heritage","lat":16.457,"lng":107.586,"rating":4.5,"avg_visit_min":90,"popularity":0.5,"base_score":90},{"id":"dd-dt21","name":"Chùa Huyền Không Sơn Thượng","category":"temple","lat":16.43,"lng":107.54,"rating":4.5,"avg_visit_min":60,"popularity":0.5,"base_score":90},{"id":"dd-dt22","name":"Chùa Thiền Lâm","category":"temple","lat":16.442,"lng":107.565,"rating":4.5,"avg_visit_min":60,"popularity":0.5,"base_score":90},{"id":"dd-dt23","name":"Chùa Báo Quốc","category":"temple","lat":16.458,"lng":107.58,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt24","name":"Ga Huế","category":"architecture","lat":16.459,"lng":107.583,"rating":4.5,"avg_visit_min":60,"popularity":0.5,"base_score":90},{"id":"dd-dt25","name":"Phố cổ Bao Vinh","category":"heritage","lat":16.478,"lng":107.583,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt26","name":"Văn Thánh Huế","category":"heritage","lat":16.464,"lng":107.565,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt27","name":"Điện Hòn Chén","category":"temple","lat":16.44,"lng":107.545,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt29","name":"Trường THPT Hai Bà Trưng","category":"heritage","lat":16.461,"lng":107.589,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt30","name":"Không gian Ký ức Lê Bá Đảng","category":"architecture","lat":16.41,"lng":107.59,"rating":4.5,"avg_visit_min":60,"popularity":0.5,"base_score":90},{"id":"dd-dt31","name":"Bến thuyền Tòa Khâm","category":"nature","lat":16.4625,"lng":107.5875,"rating":4.5,"avg_visit_min":45,"popularity":0.5,"base_score":90},{"id":"dd-dt32","name":"Trung tâm Nghệ thuật Điềm Phùng Thị","category":"art","lat":16.4638,"lng":107.588,"rating":4.5,"avg_visit_min":60,"popularity":0.5,"base_score":90},{"id":"dd-dt33","name":"Làng hoa giấy Thanh Tiên","category":"craft_village","lat":16.39,"lng":107.62,"rating":4.5,"avg_visit_min":90,"popularity":0.5,"base_score":90},{"id":"dd-dt34","name":"Chùa Diệu Đế","category":"temple","lat":16.465,"lng":107.59,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt35","name":"Hồ Thủy Tiên","category":"nature","lat":16.415,"lng":107.575,"rating":4.5,"avg_visit_min":45,"popularity":0.5,"base_score":90},{"id":"dd-dt36","name":"Đền Huyền Trân Công Chúa","category":"temple","lat":16.435,"lng":107.562,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"dd-dt37","name":"Nhà vườn An Hiên","category":"heritage","lat":16.452,"lng":107.551,"rating":4.5,"avg_visit_min":120,"popularity":0.5,"base_score":90},{"id":"at-01","name":"Bún bò Bà Tuyết","category":"food","lat":16.4477,"lng":107.5999,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-02","name":"Hẻm Huế - Nướng than","category":"food","lat":16.4447,"lng":107.5969,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-03","name":"Hẻm Huế - Nướng bơ","category":"food","lat":16.4477,"lng":107.5999,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-04","name":"Quán chay Thanh Liễu","category":"food","lat":16.4417,"lng":107.5839,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-05","name":"Quán Thúy - bánh Nam Phổ","category":"food","lat":16.4827,"lng":107.6049,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-06","name":"O Cương Chú Điệp - quán bún bò Huế","category":"food","lat":16.4667,"lng":107.5989,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-07","name":"Bánh Bà Đỏ","category":"food","lat":16.4442,"lng":107.6064,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-08","name":"Nem lụi Tài Phú","category":"food","lat":16.4802,"lng":107.5924,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-09","name":"Cơm chay Liên Hoa","category":"food","lat":16.4592,"lng":107.5714,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-10","name":"Bánh canh cá lóc Bình","category":"food","lat":16.4522,"lng":107.5744,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-11","name":"Nhà hàng Cung Đình","category":"food","lat":16.4762,"lng":107.5784,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-13","name":"Cơm Huế O Én","category":"food","lat":16.4842,"lng":107.6064,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-14","name":"Tiệm cơm Hồi Nớ","category":"food","lat":16.4487,"lng":107.6009,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-15","name":"Quán bánh Chi","category":"food","lat":16.4572,"lng":107.6094,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-16","name":"Bánh xèo quán Mộc","category":"food","lat":16.4702,"lng":107.5924,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-17","name":"Bánh khoái Hồng Mai","category":"food","lat":16.4452,"lng":107.5874,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-18","name":"Nem lụi Ôn Mệ","category":"food","lat":16.4587,"lng":107.5809,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-19","name":"Bún bò O Liễu","category":"food","lat":16.4407,"lng":107.5829,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-20","name":"Chè Thanh","category":"food","lat":16.4652,"lng":107.5774,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-21","name":"Chè Ông Lạc","category":"food","lat":16.4537,"lng":107.5959,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"at-22","name":"Đậu hủ cô Tâm chùa","category":"food","lat":16.4827,"lng":107.6049,"rating":4.3,"avg_visit_min":45,"popularity":0.4,"base_score":86},{"id":"cf-01","name":"Quán Cafe Mắt Biếc","category":"cafe","lat":16.4453,"lng":107.5905,"rating":4.4,"avg_visit_min":60,"popularity":0.4,"base_score":88},{"id":"cf-02","name":"Tân Cafe","category":"cafe","lat":16.4497,"lng":107.5949,"rating":4.4,"avg_visit_min":60,"popularity":0.4,"base_score":88},{"id":"cf-03","name":"Tiệm Cà Phê Cấp Tới","category":"cafe","lat":16.4685,"lng":107.5777,"rating":4.4,"avg_visit_min":60,"popularity":0.4,"base_score":88},{"id":"cf-04","name":"La Gare Bistro","category":"cafe","lat":16.4513,"lng":107.5845,"rating":4.4,"avg_visit_min":60,"popularity":0.4,"base_score":88},{"id":"cf-05","name":"Vỹ Dạ Xưa Cafe","category":"cafe","lat":16.4505,"lng":107.5957,"rating":4.4,"avg_visit_min":60,"popularity":0.4,"base_score":88},{"id":"cf-06","name":"Nghĩa Cafe","category":"cafe","lat":16.4773,"lng":107.5745,"rating":4.4,"avg_visit_min":60,"popularity":0.4,"base_score":88},{"id":"cf-07","name":"The Time Coffee","category":"cafe","lat":16.4497,"lng":107.5829,"rating":4.4,"avg_visit_min":60,"popularity":0.4,"base_score":88},{"id":"cf-08","name":"Mộc Trà Cốc","category":"cafe","lat":16.4733,"lng":107.5825,"rating":4.4,"avg_visit_min":60,"popularity":0.4,"base_score":88},{"id":"cf-09","name":"Giao Cafe","category":"cafe","lat":16.4789,"lng":107.5881,"rating":4.4,"avg_visit_min":60,"popularity":0.4,"base_score":88},{"id":"cf-10","name":"Đội Cafe","category":"cafe","lat":16.4589,"lng":107.5801,"rating":4.4,"avg_visit_min":60,"popularity":0.4,"base_score":88},{"id":"cf-11","name":"Sline Cafe Bar","category":"cafe","lat":16.4521,"lng":107.5973,"rating":4.4,"avg_visit_min":60,"popularity":0.4,"base_score":88},{"id":"cf-12","name":"Truong Tien Coffee & tea","category":"cafe","lat":16.4557,"lng":107.5889,"rating":4.4,"avg_visit_min":60,"popularity":0.4,"base_score":88},{"id":"cf-13","name":"Quán cà phê chiều","category":"cafe","lat":16.4873,"lng":107.5965,"rating":4.4,"avg_visit_min":60,"popularity":0.4,"base_score":88},{"id":"qun_ng_7800","name":"Quán Ngỏ","category":"food","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"bnh_canh_o_hoa_3723","name":"Bánh Canh O Hoa","category":"food","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"qun_cht__cm_mt__4162","name":"Quán Chất ( Cơm Mẹt )","category":"food","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"ch_thch_xoa_d_liu_8071","name":"Chè Thạch Xoa Dì Liễu","category":"food","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"bn_b_o_vy__1533","name":"Bún Bò O Vầy ","category":"food","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"bn_b_o_vy__2458","name":"Bún Bò O Vầy ","category":"food","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"tu_h__di_cha_thin_m__5674","name":"Tàu Hũ ( Dưới Chùa Thiên Mụ )","category":"food","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"tu_h__di_cha_thin_m__2858","name":"Tàu Hũ ( Dưới Chùa Thiên Mụ )","category":"food","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"ngm_coffee_1487","name":"Ngâm Coffee","category":"cafe","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"kodo_2383","name":"KODO","category":"cafe","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"c_ph_lu_t_phng_v_s_6032","name":"Cà Phê Lầu Tứ Phương Vô Sự","category":"cafe","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"ngm_c_ph_5610","name":"Ngâm Cà Phê","category":"cafe","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"lng_hng_thy_xun__4601","name":"Làng Hương Thủy Xuân ","category":"heritage","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"cha_thin_m_8330","name":"Chùa Thiên Mụ","category":"heritage","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"i_ni_hu_1721","name":"Đại Nội Huế","category":"heritage","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"lng_thiu_tr__8909","name":"Lăng Thiệu Trị ","category":"heritage","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"lng_khi_nh__2660","name":"Lăng Khải Định ","category":"heritage","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"i_vng_cnh_9300","name":"Đồi Vọng Cảnh","category":"nature","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"cha_t_hiu_0394","name":"Chùa Từ Hiếu","category":"heritage","lat":1,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90},{"id":"a_7919","name":"a","category":"food","lat":16.4637,"lng":107.5909,"rating":4.5,"avg_visit_min":90,"popularity":0.9,"base_score":90}];
+    const SPEED_KM_H = 30;
+
+    function distance(lat1, lng1, lat2, lng2) {
+      const R = 6371; 
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLng/2) * Math.sin(dLng/2);
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
     
-    <div id="grid"></div>
+    function travelTime(distKm) { return (distKm / SPEED_KM_H) * 60; }
 
-    <script>
-        const GRID_SIZE = 20;
-        const gridEl = document.getElementById('grid');
-        let cells = [];
-        let startPos = {x: 2, y: 2};
-        let endPos = {x: 17, y: 17};
-        let pois = [ {x: 6, y: 6}, {x: 13, y: 4}, {x: 9, y: 11}, {x: 15, y: 12} ]; // 4 POIs
-        const TARGET_POIS = 3; // Must collect at least 3 POIs to succeed
-        
-        let qStart = [];
-        let qEnd = [];
-        let visitedStart = new Map(); // Key: "x-y-mask" -> { prevKey, time }
-        let visitedEnd = new Map();
-        let simInterval;
-        let isRunning = false;
+    class PriorityQueue {
+      constructor() { this.items = []; }
+      push(item) {
+        this.items.push(item);
+        this.items.sort((a, b) => a.f_cost - b.f_cost);
+      }
+      pop() { return this.items.shift(); }
+      isEmpty() { return this.items.length === 0; }
+      getItems() { return this.items; }
+    }
 
-        function getCellIndex(x, y) { return y * GRID_SIZE + x; }
-        function getPosFromKey(key) { const parts = key.split('-'); return {x: parseInt(parts[0]), y: parseInt(parts[1]), mask: parseInt(parts[2])}; }
-        function getKey(x, y, mask) { return `${x}-${y}-${mask}`; }
-        function inBounds(x, y) { return x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE; }
-        
-        function inCorridor(x, y) {
-            return x >= startPos.x - 2 && x <= endPos.x + 2 && y >= startPos.y - 2 && y <= endPos.y + 2;
+    const TIME_BUDGET = 360;
+    const START_HOUR = 8;
+    const startLat = 16.4637;
+    const startLng = 107.5909;
+
+    const btnStart = document.getElementById('btnStart');
+    const logsDiv = document.getElementById('logs');
+    const pqListDiv = document.getElementById('pqList');
+
+    let pq = new PriorityQueue();
+    let nodesExplored = 0;
+    let timer = null;
+
+    function formatTime(startHour, currentMinutes) {
+      const totalMinutes = startHour * 60 + Math.floor(currentMinutes);
+      const h = Math.floor(totalMinutes / 60) % 24;
+      const m = totalMinutes % 60;
+      return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    }
+
+    function addLog(html) {
+      const div = document.createElement('div');
+      div.className = 'log-entry';
+      div.innerHTML = html;
+      logsDiv.appendChild(div);
+      logsDiv.parentElement.scrollTop = logsDiv.parentElement.scrollHeight;
+    }
+
+    function renderPQ() {
+      pqListDiv.innerHTML = '';
+      const items = pq.getItems().slice(0, 15);
+      items.forEach((item, idx) => {
+        const name = item.path.length > 0 ? item.path[item.path.length-1].name : 'Khách sạn';
+        pqListDiv.innerHTML += `
+          <div class="pq-item">
+            <span>${idx + 1}. ${name} (${formatTime(START_HOUR, item.g_cost)})</span>
+            <span class="f-score">F=${item.f_cost.toFixed(1)}</span>
+          </div>
+        `;
+      });
+      if (pq.getItems().length > 15) {
+        pqListDiv.innerHTML += `<div class="pq-item" style="justify-content: center; color:#64748b;">+ ${pq.getItems().length - 15} nhánh khác...</div>`;
+      }
+    }
+
+    function step() {
+      if (pq.isEmpty()) {
+        addLog(`<div class="log-goal">❌ Hàng đợi rỗng. Không tìm thấy đường đi!</div>`);
+        clearInterval(timer);
+        btnStart.disabled = false;
+        return;
+      }
+
+      const node = pq.pop();
+      nodesExplored++;
+      renderPQ();
+
+      const currentPlaceName = node.path.length > 0 ? node.path[node.path.length - 1].name : 'Điểm xuất phát';
+      
+      let html = `<div class="log-step">🔍 [DUYỆT NODE #${nodesExplored}] Bốc ra: ${currentPlaceName}</div>`;
+      html += `<div class="log-info">Đã dùng ${node.g_cost.toFixed(1)}/${TIME_BUDGET} phút | G=${node.g_cost.toFixed(1)} | H=${node.h_cost.toFixed(1)} | F=${node.f_cost.toFixed(1)}</div>`;
+
+      if (node.g_cost >= TIME_BUDGET * 0.85) {
+        html += `<div class="log-goal">🎯 GOAL REACHED! Đã tiêu thụ đủ quỹ thời gian!</div>`;
+        html += `<div class="log-branch" style="margin-top:10px;">🏆 LỘ TRÌNH TỐI ƯU:</div>`;
+        node.path.forEach((step, i) => {
+          html += `<div class="log-branch">[${step.time}] ${step.name} (F=${step.f})</div>`;
+        });
+        addLog(html);
+        clearInterval(timer);
+        btnStart.disabled = false;
+        return;
+      }
+
+      if (nodesExplored > 1000) {
+        addLog(html + `<div class="log-penalty">⚠️ PRUNED: Chạm mốc 1000 nodes! Ngắt.</div>`);
+        clearInterval(timer);
+        btnStart.disabled = false;
+        return;
+      }
+
+      html += `<div class="log-info">▶️ Điều hướng nhánh mới (Heuristic thay đổi theo thời gian hiện tại ${formatTime(START_HOUR, node.g_cost)})</div>`;
+      
+      const candidates = places.filter(p => !node.visitedIds.has(p.id));
+      
+      candidates.forEach(p => {
+        let dynamicBonus = 0;
+        if (p.category === 'food' && node.g_cost >= 180 && node.g_cost <= 270) dynamicBonus += 800;
+        else if (['heritage', 'nature', 'architecture'].includes(p.category) && (node.g_cost < 180 || node.g_cost > 270)) dynamicBonus += 300;
+        else if (['cafe', 'market'].includes(p.category) && node.g_cost >= 270) dynamicBonus += 250;
+        if (p.category === 'food' && (node.g_cost < 150 || node.g_cost > 300)) dynamicBonus -= 500; 
+
+        p.match_score = p.base_score + dynamicBonus;
+      });
+
+      candidates.sort((a, b) => b.match_score - a.match_score);
+      const topCandidates = candidates.slice(0, 5);
+      
+      html += `<div class="log-info">Lọc được Top 5 điểm có Match Score cao nhất:</div>`;
+
+      for (const place of topCandidates) {
+        const dist = distance(node.currentLat, node.currentLng, place.lat, place.lng);
+        const tTravel = travelTime(dist);
+        const tVisit = place.avg_visit_min;
+
+        const newG = node.g_cost + tTravel + tVisit;
+
+        if (newG > TIME_BUDGET + 30) {
+          html += `<div class="log-penalty">✂️ Prune: ${place.name} vượt quá ngân sách (${newG.toFixed(0)} > ${TIME_BUDGET + 30})</div>`;
+          continue;
         }
 
-        function getPoiIndex(x, y) {
-            return pois.findIndex(p => p.x === x && p.y === y);
+        const penalty = tTravel > 120 ? 10000 : 0;
+        if (penalty > 0) {
+           html += `<div class="log-penalty">⛔ Phạt ${place.name}: Cách quá xa -> +10000 F-cost</div>`;
         }
 
-        function countBits(n) {
-            let count = 0;
-            while (n) { count += n & 1; n >>= 1; }
-            return count;
-        }
+        const estRemainingTime = Math.max(0, TIME_BUDGET - newG);
+        const heuristicBonus = place.match_score * 0.5; 
+        const newH = estRemainingTime - heuristicBonus;
+        const newF = newG + newH + penalty;
 
-        function initGrid() {
-            gridEl.innerHTML = '';
-            cells = [];
-            for (let y = 0; y < GRID_SIZE; y++) {
-                for (let x = 0; x < GRID_SIZE; x++) {
-                    const cell = document.createElement('div');
-                    cell.className = 'cell';
-                    cell.dataset.x = x;
-                    cell.dataset.y = y;
-                    
-                    if (inCorridor(x, y)) cell.classList.add('corridor');
-                    if (x === startPos.x && y === startPos.y) cell.classList.add('start');
-                    if (x === endPos.x && y === endPos.y) cell.classList.add('end');
-                    
-                    let poiIdx = getPoiIndex(x, y);
-                    if (poiIdx !== -1) {
-                        const poiEl = document.createElement('div');
-                        poiEl.className = 'poi';
-                        poiEl.id = `poi-${poiIdx}`;
-                        cell.appendChild(poiEl);
-                    }
-                    
-                    gridEl.appendChild(cell);
-                    cells.push(cell);
-                }
-            }
-        }
+        const newVisited = new Set(node.visitedIds);
+        newVisited.add(place.id);
 
-        function resetGrid() {
-            clearInterval(simInterval);
-            isRunning = false;
-            document.getElementById('btn-start').disabled = false;
-            initGrid();
-        }
+        html += `<div class="log-branch">🌱 Nạp vào Hàng Đợi: ${place.name} (G:${newG.toFixed(1)} + H:${newH.toFixed(1)} = <b>F:${newF.toFixed(1)}</b>)</div>`;
 
-        function startSimulation() {
-            if (isRunning) return;
-            isRunning = true;
-            document.getElementById('btn-start').disabled = true;
-            
-            // State: { x, y, mask, time }
-            let startState = {x: startPos.x, y: startPos.y, mask: 0, time: 0};
-            let endState = {x: endPos.x, y: endPos.y, mask: 0, time: 0};
-            
-            qStart = [startState];
-            qEnd = [endState];
-            visitedStart.clear();
-            visitedEnd.clear();
-            
-            visitedStart.set(getKey(startState.x, startState.y, 0), {prevKey: null, time: 0});
-            visitedEnd.set(getKey(endState.x, endState.y, 0), {prevKey: null, time: 0});
+        pq.push({
+          currentLat: place.lat, currentLng: place.lng,
+          visitedIds: newVisited,
+          path: [...node.path, { name: place.name, type: place.category, time: formatTime(START_HOUR, node.g_cost + tTravel), g: newG.toFixed(1), h: newH.toFixed(1), f: newF.toFixed(1) }],
+          g_cost: newG, h_cost: newH, f_cost: newF
+        });
+      }
 
-            simInterval = setInterval(step, 60);
-        }
+      addLog(html);
+      renderPQ();
+    }
 
-        const dirs = [[0,1], [1,0], [0,-1], [-1,0]];
-
-        // A* Heuristic scoring function for Priority Queue
-        // We want to minimize time, but massively reward collecting POIs
-        function getScore(state) {
-            // Base cost is time. Bonus for each POI collected is -40.
-            return state.time - (countBits(state.mask) * 40);
-        }
-
-        function expandWave(queue, visitedMap, otherVisitedMap, waveClass) {
-            let intersectPoint = null;
-            
-            // Sort to simulate Priority Queue (Heuristic A*)
-            queue.sort((a, b) => getScore(a) - getScore(b));
-            
-            // Process a batch of top states to animate smoothly
-            let batchSize = Math.min(10, queue.length);
-            
-            for(let i=0; i<batchSize; i++) {
-                let curr = queue.shift();
-                
-                for (let d of dirs) {
-                    let nx = curr.x + d[0], ny = curr.y + d[1];
-                    if (!inBounds(nx, ny) || !inCorridor(nx, ny)) continue;
-                    
-                    let nMask = curr.mask;
-                    let poiIdx = getPoiIndex(nx, ny);
-                    if (poiIdx !== -1) {
-                        nMask |= (1 << poiIdx); // Set bit for this POI
-                    }
-                    
-                    let nKey = getKey(nx, ny, nMask);
-                    
-                    if (!visitedMap.has(nKey)) {
-                        visitedMap.set(nKey, {prevKey: getKey(curr.x, curr.y, curr.mask), time: curr.time + 1});
-                        queue.push({x: nx, y: ny, mask: nMask, time: curr.time + 1});
-                        
-                        // Visually color cell
-                        let cellEl = cells[getCellIndex(nx, ny)];
-                        if(!cellEl.classList.contains('start') && !cellEl.classList.contains('end')) {
-                            // If this state has collected POIs, show stronger color to represent "pull"
-                            if (countBits(nMask) > 0) cellEl.classList.add('wave-poi-boost');
-                            else cellEl.classList.add(waveClass);
-                        }
-
-                        // Check intersection with the OTHER wave
-                        // They intersect at (nx, ny). The combined masks must have >= TARGET_POIS
-                        for (let [otherKey, otherVal] of otherVisitedMap.entries()) {
-                            let [ox, oy, oMask] = otherKey.split('-');
-                            if (parseInt(ox) === nx && parseInt(oy) === ny) {
-                                let combinedMask = nMask | parseInt(oMask);
-                                if (countBits(combinedMask) >= TARGET_POIS) {
-                                    intersectPoint = {
-                                        x: nx, y: ny, 
-                                        maskStart: (waveClass === 'wave-start') ? nMask : parseInt(oMask),
-                                        maskEnd: (waveClass === 'wave-start') ? parseInt(oMask) : nMask
-                                    };
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-                if (intersectPoint) break;
-            }
-            return intersectPoint;
-        }
-
-        function step() {
-            // Expand Start Wave
-            let intersect1 = expandWave(qStart, visitedStart, visitedEnd, 'wave-start');
-            if (intersect1) { finishSimulation(intersect1); return; }
-
-            // Expand End Wave
-            let intersect2 = expandWave(qEnd, visitedEnd, visitedStart, 'wave-end');
-            if (intersect2) { finishSimulation(intersect2); return; }
-            
-            if (qStart.length === 0 && qEnd.length === 0) {
-                clearInterval(simInterval);
-                alert("Không tìm thấy đường thỏa mãn điều kiện gom đủ POI!");
-            }
-        }
-
-        function finishSimulation(intersect) {
-            clearInterval(simInterval);
-            let cellEl = cells[getCellIndex(intersect.x, intersect.y)];
-            cellEl.classList.add('intersect');
-            
-            // Draw path back to start and end
-            setTimeout(() => {
-                drawPath(intersect.x, intersect.y, intersect.maskStart, visitedStart);
-                drawPath(intersect.x, intersect.y, intersect.maskEnd, visitedEnd);
-            }, 300);
-        }
-
-        function drawPath(startX, startY, startMask, visitedMap) {
-            let currKey = getKey(startX, startY, startMask);
-            
-            let drawInterval = setInterval(() => {
-                if (!currKey || currKey === "null") {
-                    clearInterval(drawInterval);
-                    return;
-                }
-                
-                let pos = getPosFromKey(currKey);
-                let cellEl = cells[getCellIndex(pos.x, pos.y)];
-                
-                if (!cellEl.classList.contains('start') && !cellEl.classList.contains('end')) {
-                    // Highlight POI if this cell contains one
-                    let poiIdx = getPoiIndex(pos.x, pos.y);
-                    if (poiIdx !== -1) {
-                        document.getElementById(`poi-${poiIdx}`).classList.add('poi-visited');
-                    } else {
-                        // Draw path dot
-                        const dot = document.createElement('div');
-                        dot.className = 'path';
-                        cellEl.appendChild(dot);
-                        cellEl.classList.add('path-line');
-                    }
-                }
-                
-                let stateData = visitedMap.get(currKey);
-                if (stateData) currKey = stateData.prevKey;
-                else currKey = null;
-                
-            }, 80);
-        }
-
-        initGrid();
-    </script>
+    btnStart.onclick = () => {
+      btnStart.disabled = true;
+      logsDiv.innerHTML = '';
+      pq = new PriorityQueue();
+      nodesExplored = 0;
+      
+      pq.push({
+        currentLat: startLat, currentLng: startLng,
+        path: [], visitedIds: new Set(),
+        g_cost: 0, h_cost: 0, f_cost: 0
+      });
+      renderPQ();
+      
+      addLog('<div class="log-step">Chuẩn bị mô phỏng A* (Speed: 1 node / 1.5s)...</div>');
+      timer = setInterval(step, 1500);
+    };
+  </script>
 </body>
 </html>

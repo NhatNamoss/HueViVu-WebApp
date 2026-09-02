@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getAuthUserId, generateToken } from '@/lib/auth';
 import { generateTrip } from '@/lib/ai';
-import { generateBfsTrip } from '@/lib/bfs';
+import { generateAstarTrip } from '@/lib/astar';
 import { v4 as uuidv4 } from 'uuid';
 
 // GET /api/trips — list user trips
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const itinerary = generateBfsTrip({ duration, styles, companion, budget, food: food || [] });
+    const itinerary = generateAstarTrip({ duration, styles, companion, budget, food: food || [] });
 
     const tripId = 'trip_' + uuidv4().replace(/-/g, '').slice(0, 12);
     db.prepare(`INSERT INTO trips

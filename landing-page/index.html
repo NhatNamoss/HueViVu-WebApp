@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="vi" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HueViVu — Chạm vào linh hồn Cố đô</title>
+  <meta name="description" content="Trợ lý du lịch AI cá nhân hóa cho Huế. Lập lịch trình theo nhu cầu thực, điều chỉnh theo thời tiết và cảm xúc của bạn.">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            serif: ['Playfair Display', 'serif'],
+          },
+          colors: {
+            hue: {
+              50: '#F9F5F9',
+              100: '#F0E5F0',
+              purple: '#5B3256',
+              sunset: '#E87A5D',
+              sand: '#F4EFE6',
+              gold: '#D4AF37'
+            }
+          },
+          animation: {
+            'fade-up': 'fadeUp 0.8s ease-out forwards',
+            'float-slow': 'float 4s ease-in-out infinite',
+            'pulse-soft': 'pulseSoft 3s infinite',
+            'marquee': 'marquee 30s linear infinite',
+          },
+          keyframes: {
+            fadeUp: {
+              '0%': { opacity: '0', transform: 'translateY(24px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+            float: {
+              '0%, 100%': { transform: 'translateY(0)' },
+              '50%': { transform: 'translateY(-10px)' },
+            },
+            pulseSoft: {
+              '0%, 100%': { opacity: '1' },
+              '50%': { opacity: '0.6' },
+            },
+            marquee: {
+              '0%': { transform: 'translateX(0%)' },
+              '100%': { transform: 'translateX(-50%)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #F4EFE6;
+      background-image: url("data:image/svg+xml,%3Csvg width='80' height='80' viewBox='0 0 80 80' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23e87a5d' fill-opacity='0.025'%3E%3Cpath d='M50 50v-10h-5v10h-10v5h10v10h5v-10h10v-5h-10zm0-40V0h-5v10h-10v5h10v10h5V15h10v-5h-10z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    }
+    .glass { background: rgba(255,255,255,0.6); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.8); }
+    .glass-dark { background: rgba(91,50,86,0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.1); }
+    .card { background: white; border: 1px solid #F3F0EC; box-shadow: 0 2px 20px rgba(0,0,0,0.04); }
+    .d100 { animation-delay: 100ms; opacity: 0; }
+    .d200 { animation-delay: 200ms; opacity: 0; }
+    .d300 { animation-delay: 300ms; opacity: 0; }
+    .d400 { animation-delay: 400ms; opacity: 0; }
+    .timeline-line { background: linear-gradient(to bottom, rgba(232,122,93,0.1), rgba(232,122,93,0.7), rgba(232,122,93,0.1)); }
+  </style>
+</head>
+
+<body class="text-gray-800 font-sans antialiased selection:bg-hue-sunset/30">
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- NAV                                                  -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <nav class="fixed top-0 inset-x-0 z-50 glass border-b border-white/50">
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 bg-hue-sunset rounded-xl flex items-center justify-center text-white font-serif font-bold text-lg shadow-md shadow-hue-sunset/30">H</div>
+        <span class="text-xl font-serif font-semibold text-hue-purple">HueViVu</span>
+      </div>
+      <div class="hidden sm:flex items-center gap-6 text-sm text-gray-500">
+        <a href="#features" class="hover:text-hue-purple transition-colors">Tính năng</a>
+        <a href="#proof" class="hover:text-hue-purple transition-colors">Đánh giá</a>
+        <a href="#partners" class="hover:text-hue-purple transition-colors">Đối tác</a>
+      </div>
+      <a href="#cta" class="px-5 py-2.5 bg-hue-purple text-white rounded-full text-sm font-medium hover:bg-opacity-90 transition-all shadow-md hover:shadow-xl hover:-translate-y-0.5">
+        Trải nghiệm ngay →
+      </a>
+    </div>
+  </nav>
+
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- HERO                                                 -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <section class="relative min-h-[100svh] flex items-center pt-20 overflow-hidden">
+    <div class="absolute top-1/4 -left-20 w-[500px] h-[500px] bg-hue-sunset rounded-full blur-[120px] opacity-15 pointer-events-none"></div>
+    <div class="absolute -bottom-20 right-0 w-[600px] h-[600px] bg-hue-purple rounded-full blur-[130px] opacity-10 pointer-events-none"></div>
+
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 w-full py-16 relative z-10">
+      <div class="flex flex-col lg:flex-row items-center gap-16">
+
+        <!-- Left: Copy -->
+        <div class="flex-1 text-center lg:text-left">
+
+          <!-- Social Proof Badge -->
+          <div class="inline-flex items-center gap-3 px-4 py-2.5 glass rounded-full mb-7 animate-fade-up border border-white/60 shadow-sm">
+            <!-- Avatars -->
+            <div class="flex -space-x-2">
+              <div class="w-7 h-7 rounded-full bg-orange-200 border-2 border-white flex items-center justify-center text-xs font-bold text-orange-700">T</div>
+              <div class="w-7 h-7 rounded-full bg-blue-200 border-2 border-white flex items-center justify-center text-xs font-bold text-blue-700">M</div>
+              <div class="w-7 h-7 rounded-full bg-green-200 border-2 border-white flex items-center justify-center text-xs font-bold text-green-700">L</div>
+            </div>
+            <span class="text-sm text-gray-600">
+              <span class="font-semibold text-hue-purple">300+</span> du khách đang thử nghiệm
+            </span>
+            <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse-soft flex-shrink-0"></span>
+          </div>
+
+          <h1 class="text-5xl sm:text-6xl lg:text-[4.5rem] font-serif text-hue-purple leading-[1.08] mb-6 animate-fade-up d100">
+            Chạm vào <em class="text-hue-sunset not-italic">linh hồn Huế</em><br>
+            theo cách riêng<br>của bạn
+          </h1>
+
+          <p class="text-lg text-gray-500 max-w-lg mx-auto lg:mx-0 leading-relaxed mb-8 font-light animate-fade-up d200">
+            Không còn lịch trình cứng nhắc. HueViVu lắng nghe nhu cầu của bạn, theo dõi thời tiết thực tế, và điều chỉnh mọi thứ trong tích tắc — như một người bạn địa phương luôn sẵn sàng bên cạnh.
+          </p>
+
+          <div class="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start animate-fade-up d300">
+            <a href="#cta" class="px-8 py-4 bg-hue-sunset text-white rounded-full font-medium text-lg shadow-lg shadow-hue-sunset/30 hover:shadow-xl hover:shadow-hue-sunset/40 hover:-translate-y-1 transition-all duration-300 text-center">
+              Bắt đầu hành trình 🍁
+            </a>
+            <a href="#features" class="px-8 py-4 glass text-hue-purple rounded-full font-medium text-lg hover:bg-white/80 transition-all duration-300 text-center flex items-center justify-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Xem cách hoạt động
+            </a>
+          </div>
+
+          <!-- Trust signals -->
+          <div class="mt-10 flex items-center gap-6 justify-center lg:justify-start animate-fade-up d400 text-sm text-gray-400">
+            <span class="flex items-center gap-1.5">✅ Miễn phí thử nghiệm</span>
+            <span class="flex items-center gap-1.5">✅ Không cần đăng ký</span>
+            <span class="flex items-center gap-1.5">✅ MVP ra mắt T9/2026</span>
+          </div>
+        </div>
+
+        <!-- Right: Phone Mockup -->
+        <div class="flex-1 flex justify-center lg:justify-end animate-fade-up d200">
+          <div class="relative animate-float-slow">
+            <div class="absolute inset-0 bg-hue-sunset/20 blur-2xl rounded-[3rem] scale-105"></div>
+            <div class="w-[300px] sm:w-[320px] h-[620px] bg-white rounded-[3rem] p-3 shadow-2xl relative border-4 border-white z-10">
+              <div class="w-full h-full bg-[#FAFAFA] rounded-[2.5rem] overflow-hidden relative flex flex-col">
+
+                <!-- Status bar -->
+                <div class="flex items-center justify-between px-5 pt-3 pb-2 bg-white">
+                  <span class="text-xs text-gray-400 font-medium">9:41</span>
+                  <div class="flex gap-1 items-center">
+                    <div class="w-4 h-2 bg-gray-800 rounded-sm"></div>
+                    <div class="w-1 h-1 bg-green-400 rounded-full"></div>
+                  </div>
+                </div>
+
+                <!-- App Header -->
+                <div class="bg-white px-5 pt-1 pb-4 shadow-[0_2px_10px_rgba(0,0,0,0.04)]">
+                  <p class="text-[10px] text-gray-400 uppercase tracking-widest mb-0.5">Sáng mùa thu · Huế</p>
+                  <h2 class="text-lg font-serif font-bold text-hue-purple">Chào bạn đến Huế 🍵</h2>
+                </div>
+
+                <!-- Content -->
+                <div class="flex-1 p-4 space-y-3 overflow-hidden pb-20">
+                  <!-- Weather card -->
+                  <div class="bg-gradient-to-br from-[#FEF0EB] to-white p-3.5 rounded-2xl border border-[#FBE3D9]">
+                    <div class="flex justify-between items-center">
+                      <div>
+                        <p class="text-base font-serif text-hue-sunset leading-tight">Trời đang hửng nắng</p>
+                        <p class="text-xs text-gray-400 mt-0.5">Rất lý tưởng để thăm Đại Nội.</p>
+                      </div>
+                      <span class="text-3xl">🌤️</span>
+                    </div>
+                  </div>
+
+                  <!-- Itinerary -->
+                  <div class="bg-white p-3.5 rounded-2xl border border-gray-100 shadow-sm">
+                    <div class="flex items-center gap-2 mb-3">
+                      <div class="w-1 h-4 bg-hue-sunset rounded-full"></div>
+                      <p class="text-xs font-semibold text-gray-700">Dòng chảy hôm nay</p>
+                    </div>
+                    <div class="pl-4 border-l-2 border-gray-100 space-y-3">
+                      <div class="relative">
+                        <div class="absolute -left-[19px] top-0.5 w-2.5 h-2.5 bg-white border-2 border-hue-sunset rounded-full"></div>
+                        <p class="text-[10px] font-bold text-hue-sunset">08:30</p>
+                        <p class="text-xs text-gray-700">Trà cung đình · Tịnh Tâm</p>
+                      </div>
+                      <div class="relative">
+                        <div class="absolute -left-[19px] top-0.5 w-2.5 h-2.5 bg-white border-2 border-gray-300 rounded-full"></div>
+                        <p class="text-[10px] font-bold text-gray-400">10:30</p>
+                        <p class="text-xs text-gray-500">Đại Nội Huế</p>
+                      </div>
+                      <div class="relative opacity-50">
+                        <div class="absolute -left-[19px] top-0.5 w-2.5 h-2.5 bg-white border-2 border-gray-200 rounded-full"></div>
+                        <p class="text-[10px] font-bold text-gray-400">14:00 <span class="text-hue-sunset line-through-none">Đổi 🌧️</span></p>
+                        <p class="text-xs text-gray-400 line-through">Biển Thuận An</p>
+                        <p class="text-xs text-hue-sunset">→ Bảo tàng Mỹ thuật</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- AI nudge -->
+                  <div class="glass p-3 rounded-2xl flex gap-2.5 border border-white/80">
+                    <div class="w-7 h-7 bg-hue-purple/10 rounded-full flex items-center justify-center text-hue-purple text-sm flex-shrink-0">✨</div>
+                    <div>
+                      <p class="text-xs font-semibold text-hue-purple">HueViVu cảm nhận</p>
+                      <p class="text-[11px] text-gray-500 mt-0.5">Bạn đang hơi mệt. Đổi sang xích lô dạo bờ Hồ nhé?</p>
+                      <div class="flex gap-1.5 mt-2">
+                        <button class="text-[10px] bg-hue-sunset text-white px-2.5 py-1 rounded-full">Đổi ngay</button>
+                        <button class="text-[10px] bg-gray-100 text-gray-500 px-2.5 py-1 rounded-full">Không sao</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Bottom nav -->
+                <div class="absolute bottom-0 inset-x-0 h-16 bg-white border-t border-gray-100 flex items-center justify-around px-4">
+                  <div class="flex flex-col items-center gap-0.5 text-hue-sunset"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span class="text-[9px]">Trang chủ</span></div>
+                  <div class="flex flex-col items-center gap-0.5 text-gray-300"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg><span class="text-[9px]">Lịch trình</span></div>
+                  <div class="flex flex-col items-center gap-0.5 text-gray-300"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 12.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg><span class="text-[9px]">Chat AI</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- PAIN POINTS                                          -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <section class="py-24 px-5 sm:px-8 bg-white">
+    <div class="max-w-5xl mx-auto">
+      <div class="text-center mb-14">
+        <p class="text-hue-sunset text-sm font-semibold uppercase tracking-widest mb-3">Bạn có quen không?</p>
+        <h2 class="text-3xl sm:text-4xl font-serif text-hue-purple mb-4">Những lúc hành trình lạc nhịp...</h2>
+        <p class="text-gray-400 font-light max-w-md mx-auto">Chúng tôi đã lắng nghe 300+ du khách. Và họ đều kể những câu chuyện như thế này.</p>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-12">
+        <div class="card p-7 rounded-3xl group hover:-translate-y-1 hover:shadow-lg transition-all duration-300 cursor-default">
+          <div class="text-3xl mb-4">🤷</div>
+          <h3 class="text-lg font-serif text-gray-800 mb-2">Không biết đi đâu trước?</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Quá nhiều địa điểm trên mạng, đâu cũng "must-go". Bạn lập kế hoạch cả buổi tối mà vẫn không chắc đúng.</p>
+        </div>
+        <div class="card p-7 rounded-3xl group hover:-translate-y-1 hover:shadow-lg transition-all duration-300 cursor-default">
+          <div class="text-3xl mb-4">🌧️</div>
+          <h3 class="text-lg font-serif text-gray-800 mb-2">Trời mưa, lịch trình đổ bể?</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Dự báo không chính xác, đến nơi trời đổ mưa to. Cả nhóm đứng trú mưa dưới mái hiên Đại Nội, không biết đi đâu tiếp.</p>
+        </div>
+        <div class="card p-7 rounded-3xl group hover:-translate-y-1 hover:shadow-lg transition-all duration-300 cursor-default">
+          <div class="text-3xl mb-4">🚫</div>
+          <h3 class="text-lg font-serif text-gray-800 mb-2">Đến nơi lại thấy "Hôm nay nghỉ"</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Review trên mạng đã cũ. Lặn lội tìm đến quán bún bò nổi tiếng, biển đề "Hôm nay nhà có việc nghỉ". Tiếc và bực bội.</p>
+        </div>
+        <div class="card p-7 rounded-3xl group hover:-translate-y-1 hover:shadow-lg transition-all duration-300 cursor-default">
+          <div class="text-3xl mb-4">😔</div>
+          <h3 class="text-lg font-serif text-gray-800 mb-2">Áp lực "phải đi cho hết"</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">Lịch trình dày đặc khiến bạn kiệt sức. Bạn thèm ngồi ngắm sông Hương một buổi chiều nhưng không dám "bỏ phí" kế hoạch.</p>
+        </div>
+      </div>
+
+      <!-- Bridge to solution -->
+      <div class="text-center bg-gradient-to-br from-hue-sand to-white rounded-3xl p-8 border border-[#EDE7DF]">
+        <p class="text-lg font-serif text-hue-purple mb-2">HueViVu không chỉ giải quyết những điều trên.</p>
+        <p class="text-gray-500 font-light">Nó <span class="font-medium text-hue-sunset">ngăn chúng xảy ra</span> — trước khi bạn kịp lo lắng.</p>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- FEATURES — ROADMAP TIMELINE                          -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <section id="features" class="py-24 px-5 sm:px-8 bg-hue-sand overflow-hidden">
+    <div class="max-w-5xl mx-auto">
+      <div class="text-center mb-20">
+        <p class="text-hue-sunset text-sm font-semibold uppercase tracking-widest mb-3">Hành trình bên trong app</p>
+        <h2 class="text-3xl sm:text-4xl font-serif text-hue-purple mb-4">Từng tính năng, một người bạn</h2>
+        <p class="text-gray-400 font-light max-w-md mx-auto">Mỗi bước trong trải nghiệm của bạn đều được suy nghĩ kỹ lưỡng.</p>
+      </div>
+
+      <div class="relative">
+        <!-- Timeline line (desktop) -->
+        <div class="hidden lg:block absolute left-1/2 top-0 bottom-0 w-px timeline-line -translate-x-px"></div>
+
+        <!-- ─── STEP 1 ─── -->
+        <div class="relative flex flex-col lg:flex-row items-center gap-8 mb-24">
+          <div class="flex-1 lg:text-right order-2 lg:order-1">
+            <div class="card p-8 rounded-3xl hover:shadow-xl transition-all duration-300 inline-block text-left lg:text-right max-w-md">
+              <span class="inline-block px-3 py-1 bg-hue-sunset/10 text-hue-sunset rounded-full text-xs font-bold tracking-widest uppercase mb-4">Bước 01</span>
+              <h3 class="text-2xl font-serif text-gray-800 mb-3">Kể câu chuyện chuyến đi</h3>
+              <p class="text-gray-400 font-light leading-relaxed mb-5">Chỉ cần nói tự nhiên. "Mình 2 người, thích ăn ngon, không muốn đi bộ nhiều, ngân sách vừa phải." HueViVu hiểu bạn ngay.</p>
+              <div class="flex flex-wrap gap-2 lg:justify-end">
+                <span class="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs">Chat tự nhiên</span>
+                <span class="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs">Sở thích cá nhân</span>
+                <span class="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs">Ngân sách</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="hidden lg:flex absolute left-1/2 -translate-x-1/2 w-14 h-14 bg-white rounded-full border-4 border-hue-sunset shadow-lg shadow-hue-sunset/20 items-center justify-center text-xl z-10">💬</div>
+
+          <div class="flex-1 flex lg:justify-start order-1 lg:order-2">
+            <div class="w-52 h-[390px] bg-gray-900 rounded-[2.5rem] p-2.5 shadow-2xl mx-auto lg:ml-16">
+              <div class="w-full h-full bg-[#FAFAFA] rounded-[2rem] overflow-hidden p-4 space-y-3">
+                <p class="text-[11px] font-bold text-hue-purple pt-2">Kể cho HueViVu nghe...</p>
+                <div class="bg-hue-sunset text-white rounded-2xl rounded-br-sm px-3 py-2.5 text-xs leading-relaxed ml-8">"Mình và bạn trai, 2 ngày, thích ẩm thực + yên tĩnh" 😊</div>
+                <div class="flex items-start gap-2">
+                  <div class="w-6 h-6 bg-hue-sunset/20 rounded-full flex items-center justify-center text-[10px] text-hue-sunset flex-shrink-0 mt-0.5">AI</div>
+                  <div class="bg-white rounded-2xl rounded-tl-sm px-3 py-2.5 text-[11px] text-gray-600 border border-gray-100 leading-relaxed">Hiểu rồi! Gợi ý hành trình "Huế lặng" — nhẹ nhàng, đầy thơ... ✨</div>
+                </div>
+                <div class="bg-white rounded-2xl p-3 border border-hue-sunset/20 text-[11px]">
+                  <p class="font-bold text-gray-700 mb-2">📋 Ngày 1 — Sáng thư thả</p>
+                  <div class="space-y-1.5 text-gray-400">
+                    <div class="flex gap-2"><span class="font-medium text-gray-600">08:30</span><span>Trà tại Tịnh Tâm Kim Cổ</span></div>
+                    <div class="flex gap-2"><span class="font-medium text-gray-600">10:30</span><span>Đại Nội (giờ vắng)</span></div>
+                    <div class="flex gap-2"><span class="font-medium text-gray-600">12:30</span><span>Bún bò Bà Tuyết</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── STEP 2 ─── -->
+        <div class="relative flex flex-col lg:flex-row items-center gap-8 mb-24">
+          <div class="flex-1 flex lg:justify-end order-1">
+            <div class="w-52 h-[390px] bg-gray-900 rounded-[2.5rem] p-2.5 shadow-2xl mx-auto lg:mr-16">
+              <div class="w-full h-full bg-hue-purple rounded-[2rem] overflow-hidden relative">
+                <div class="absolute inset-0 opacity-20" style="background-image:linear-gradient(rgba(255,255,255,.15) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.15) 1px,transparent 1px);background-size:24px 24px;"></div>
+                <div class="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
+                  <p class="text-white/50 text-[10px] tracking-widest uppercase mb-4">Bản đồ 3D</p>
+                  <div class="w-28 h-28 bg-white/10 rounded-2xl border border-white/20 flex items-center justify-center text-5xl mb-3">🏯</div>
+                  <p class="text-white font-serif font-semibold">Đại Nội Huế</p>
+                  <p class="text-white/40 text-[10px] mt-1">Nhấn để bước vào</p>
+                </div>
+                <div class="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/60">
+                  <div class="flex gap-2">
+                    <div class="flex-1 bg-white/10 rounded-xl p-2 text-center border border-white/10"><p class="text-white/50 text-[9px] uppercase">Orbit</p><p class="text-white text-[11px] font-bold">Toàn cảnh</p></div>
+                    <div class="flex-1 bg-hue-sunset/80 rounded-xl p-2 text-center"><p class="text-white/80 text-[9px] uppercase">FPS</p><p class="text-white text-[11px] font-bold">Khám phá</p></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="hidden lg:flex absolute left-1/2 -translate-x-1/2 w-14 h-14 bg-hue-purple rounded-full border-4 border-white shadow-lg shadow-hue-purple/30 items-center justify-center text-xl z-10">🏯</div>
+
+          <div class="flex-1 order-2">
+            <div class="card p-8 rounded-3xl hover:shadow-xl transition-all duration-300 inline-block max-w-md">
+              <span class="inline-block px-3 py-1 bg-hue-purple/10 text-hue-purple rounded-full text-xs font-bold tracking-widest uppercase mb-4">Bước 02</span>
+              <h3 class="text-2xl font-serif text-gray-800 mb-3">Dạo bước trong Đại Nội 3D</h3>
+              <p class="text-gray-400 font-light leading-relaxed mb-5">Trước khi đặt chân đến, hãy khám phá kiến trúc cung đình qua mô hình 3D sống động. Hai chế độ: Orbit toàn cảnh và FPS như game.</p>
+              <div class="flex flex-wrap gap-2">
+                <span class="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs">Mô hình 3D</span>
+                <span class="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs">Tương tác WASD</span>
+                <span class="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs">Điểm thuyết minh</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── STEP 3 ─── -->
+        <div class="relative flex flex-col lg:flex-row items-center gap-8 mb-24">
+          <div class="flex-1 lg:text-right order-2 lg:order-1">
+            <div class="card p-8 rounded-3xl hover:shadow-xl transition-all duration-300 inline-block text-left lg:text-right max-w-md">
+              <span class="inline-block px-3 py-1 bg-blue-50 text-blue-500 rounded-full text-xs font-bold tracking-widest uppercase mb-4">Bước 03</span>
+              <h3 class="text-2xl font-serif text-gray-800 mb-3">Nghe Cố đô kể chuyện</h3>
+              <p class="text-gray-400 font-light leading-relaxed mb-5">Đứng trước Ngọ Môn, bạn nghe 200 năm lịch sử qua giọng thuyết minh AI ấm áp. GPS tự kích hoạt khi bạn đến gần di tích.</p>
+              <div class="flex flex-wrap gap-2 lg:justify-end">
+                <span class="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs">AI Audio Guide</span>
+                <span class="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs">Tự động theo GPS</span>
+                <span class="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs">Lịch sử sâu</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="hidden lg:flex absolute left-1/2 -translate-x-1/2 w-14 h-14 bg-white rounded-full border-4 border-blue-300 shadow-lg shadow-blue-100 items-center justify-center text-xl z-10">🎧</div>
+
+          <div class="flex-1 flex lg:justify-start order-1 lg:order-2">
+            <div class="w-52 h-[390px] bg-gray-900 rounded-[2.5rem] p-2.5 shadow-2xl mx-auto lg:ml-16">
+              <div class="w-full h-full bg-gradient-to-b from-blue-950 to-slate-900 rounded-[2rem] overflow-hidden p-4 flex flex-col justify-between">
+                <div class="text-center mt-2">
+                  <p class="text-white/30 text-[10px] tracking-widest uppercase mb-4">Đang thuyết minh</p>
+                  <div class="w-16 h-16 mx-auto bg-white/10 rounded-2xl flex items-center justify-center text-3xl mb-3">🏯</div>
+                  <p class="text-white font-serif text-sm font-semibold">Ngọ Môn</p>
+                  <p class="text-white/40 text-[10px] mt-1">Hoàng thành Huế · 1833</p>
+                </div>
+                <div>
+                  <div class="flex items-end justify-center gap-0.5 h-8 mb-3">
+                    <div class="w-1 bg-blue-400/60 rounded-full animate-pulse" style="height:30%"></div>
+                    <div class="w-1 bg-blue-400/80 rounded-full animate-pulse" style="height:65%;animation-delay:.1s"></div>
+                    <div class="w-1 bg-blue-400/60 rounded-full animate-pulse" style="height:45%;animation-delay:.15s"></div>
+                    <div class="w-1 bg-blue-400/80 rounded-full animate-pulse" style="height:80%;animation-delay:.2s"></div>
+                    <div class="w-1 bg-hue-sunset rounded-full animate-pulse" style="height:100%;animation-delay:.25s"></div>
+                    <div class="w-1 bg-hue-sunset/80 rounded-full animate-pulse" style="height:75%;animation-delay:.3s"></div>
+                    <div class="w-1 bg-blue-400/60 rounded-full animate-pulse" style="height:55%;animation-delay:.35s"></div>
+                    <div class="w-1 bg-blue-400/80 rounded-full animate-pulse" style="height:40%;animation-delay:.4s"></div>
+                    <div class="w-1 bg-blue-400/60 rounded-full animate-pulse" style="height:70%;animation-delay:.45s"></div>
+                    <div class="w-1 bg-blue-400/80 rounded-full animate-pulse" style="height:35%;animation-delay:.5s"></div>
+                  </div>
+                  <div class="h-1 bg-white/10 rounded-full mb-4"><div class="h-full w-2/5 bg-hue-sunset rounded-full"></div></div>
+                  <div class="flex justify-center gap-6 items-center">
+                    <span class="text-white/40 text-lg">⏮</span>
+                    <span class="w-10 h-10 bg-hue-sunset rounded-full flex items-center justify-center text-white shadow-lg shadow-hue-sunset/40">⏸</span>
+                    <span class="text-white/40 text-lg">⏭</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ─── STEP 4 ─── -->
+        <div class="relative flex flex-col lg:flex-row items-center gap-8">
+          <div class="flex-1 flex lg:justify-end order-1">
+            <div class="w-52 h-[390px] bg-gray-900 rounded-[2.5rem] p-2.5 shadow-2xl mx-auto lg:mr-16">
+              <div class="w-full h-full bg-[#FAFAFA] rounded-[2rem] overflow-hidden p-4 space-y-3">
+                <p class="text-[11px] font-bold text-gray-700 pt-2">⚡ Điều chỉnh lịch trình</p>
+                <div class="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-[11px] text-amber-700">
+                  <p class="font-bold mb-1">⚠️ HueViVu phát hiện</p>
+                  <p>Mưa lớn dự kiến 14:00. Biển Thuận An không phù hợp hôm nay.</p>
+                </div>
+                <div class="bg-white rounded-xl p-3 border border-gray-100 text-[11px] space-y-2">
+                  <div class="flex items-center gap-2"><span class="w-4 h-4 bg-red-100 rounded-full flex items-center justify-center text-red-400 text-[9px]">✕</span><span class="line-through text-gray-300">14:00 Biển Thuận An</span></div>
+                  <div class="flex items-center gap-2"><span class="w-4 h-4 bg-green-100 rounded-full flex items-center justify-center text-green-500 text-[9px]">✓</span><span class="font-medium text-gray-600">14:00 Bảo tàng Mỹ thuật</span></div>
+                  <div class="flex items-center gap-2"><span class="w-4 h-4 bg-green-100 rounded-full flex items-center justify-center text-green-500 text-[9px]">✓</span><span class="font-medium text-gray-600">16:30 Cafe Tôi — trú mưa ☕</span></div>
+                </div>
+                <div class="p-2 bg-hue-sunset/5 rounded-xl text-[10px] text-hue-sunset border border-hue-sunset/10">💡 Không lãng phí thời gian, không lo lắng thêm.</div>
+                <div class="flex gap-2">
+                  <button class="flex-1 bg-hue-sunset text-white rounded-xl py-2 text-[11px] font-medium">Chấp nhận đổi</button>
+                  <button class="flex-1 bg-gray-100 text-gray-500 rounded-xl py-2 text-[11px]">Tự chọn</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="hidden lg:flex absolute left-1/2 -translate-x-1/2 w-14 h-14 bg-white rounded-full border-4 border-hue-sunset shadow-lg shadow-hue-sunset/20 items-center justify-center text-xl z-10">⚡</div>
+
+          <div class="flex-1 order-2">
+            <div class="card p-8 rounded-3xl hover:shadow-xl transition-all duration-300 inline-block max-w-md">
+              <span class="inline-block px-3 py-1 bg-hue-sunset/10 text-hue-sunset rounded-full text-xs font-bold tracking-widest uppercase mb-4">Bước 04</span>
+              <h3 class="text-2xl font-serif text-gray-800 mb-3">Ứng biến như người địa phương</h3>
+              <p class="text-gray-400 font-light leading-relaxed mb-5">Trời đổ mưa, quán đóng cửa, hay bạn đơn giản thay đổi ý định giữa chừng — HueViVu lập tức sắp xếp lại mà không làm hỏng cả ngày của bạn.</p>
+              <div class="flex flex-wrap gap-2">
+                <span class="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs">Thời tiết thực tế</span>
+                <span class="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs">Thay thế thông minh</span>
+                <span class="px-3 py-1.5 bg-gray-100 text-gray-500 rounded-full text-xs">Không gián đoạn</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- USE CASES — 5 tình huống cụ thể                     -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <section class="py-20 px-5 sm:px-8 bg-white overflow-hidden">
+    <div class="max-w-6xl mx-auto">
+      <div class="text-center mb-14">
+        <p class="text-hue-sunset text-sm font-semibold uppercase tracking-widest mb-3">Không chỉ lập lịch</p>
+        <h2 class="text-3xl sm:text-4xl font-serif text-hue-purple mb-4">Sự ân cần trong từng tình huống</h2>
+      </div>
+
+      <!-- Marquee-style cards for use cases -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div class="card p-6 rounded-3xl flex gap-4 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+          <div class="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0">🌧️</div>
+          <div><h4 class="font-serif text-gray-800 mb-1">Trời đổ mưa</h4><p class="text-xs text-gray-400 leading-relaxed">Tự chuyển điểm ngoài trời sang bảo tàng, cafe mái che phù hợp — theo dự báo thực.</p></div>
+        </div>
+        <div class="card p-6 rounded-3xl flex gap-4 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+          <div class="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0">🔒</div>
+          <div><h4 class="font-serif text-gray-800 mb-1">Địa điểm đóng cửa</h4><p class="text-xs text-gray-400 leading-relaxed">Phát hiện và đề xuất nơi thay thế tương tự gần đó ngay lập tức, không mất thời gian.</p></div>
+        </div>
+        <div class="card p-6 rounded-3xl flex gap-4 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+          <div class="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0">🗑️</div>
+          <div><h4 class="font-serif text-gray-800 mb-1">Muốn bỏ một điểm</h4><p class="text-xs text-gray-400 leading-relaxed">"Chán đi chùa rồi" → AI điền chỗ mới phù hợp sở thích mà không xáo trộn cả lịch.</p></div>
+        </div>
+        <div class="card p-6 rounded-3xl flex gap-4 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+          <div class="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0">➕</div>
+          <div><h4 class="font-serif text-gray-800 mb-1">Muốn thêm điểm mới</h4><p class="text-xs text-gray-400 leading-relaxed">Bạn bè giới thiệu quán ngon? Nhắn tin, AI xếp vào lịch trình hợp lý và gần nhất.</p></div>
+        </div>
+        <div class="card p-6 rounded-3xl flex gap-4 hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
+          <div class="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0">🥦</div>
+          <div><h4 class="font-serif text-gray-800 mb-1">Nhu cầu thay đổi</h4><p class="text-xs text-gray-400 leading-relaxed">"Mai mình muốn ăn chay" → Tìm quán chay ngon gần lộ trình, điều chỉnh cả ngày hôm sau.</p></div>
+        </div>
+        <div class="card p-6 rounded-3xl flex gap-4 hover:shadow-lg hover:-translate-y-1 transition-all duration-300 bg-hue-sand border-[#EDE7DF]">
+          <div class="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-2xl flex-shrink-0">😴</div>
+          <div><h4 class="font-serif text-gray-800 mb-1">Cần nghỉ ngơi</h4><p class="text-xs text-gray-400 leading-relaxed">Mỏi chân, muốn về khách sạn nghỉ? HueViVu sắp xếp lại buổi chiều mà không cảm giác lãng phí.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- SOCIAL PROOF                                         -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <section id="proof" class="py-24 px-5 sm:px-8 bg-hue-sand">
+    <div class="max-w-6xl mx-auto">
+      <div class="text-center mb-16">
+        <p class="text-hue-sunset text-sm font-semibold uppercase tracking-widest mb-3">Người dùng nói gì</p>
+        <h2 class="text-3xl sm:text-4xl font-serif text-hue-purple mb-4">Những chuyến đi đầu tiên</h2>
+        <p class="text-gray-400 font-light">Phản hồi thực từ người dùng thử nghiệm.</p>
+      </div>
+
+      <!-- Stats -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-14">
+        <div class="card p-6 rounded-2xl text-center hover:shadow-lg transition-all">
+          <p class="text-3xl font-serif font-bold text-hue-sunset mb-1">300+</p>
+          <p class="text-xs text-gray-400">Người đã thử nghiệm</p>
+        </div>
+        <div class="card p-6 rounded-2xl text-center hover:shadow-lg transition-all">
+          <p class="text-3xl font-serif font-bold text-hue-sunset mb-1">500+</p>
+          <p class="text-xs text-gray-400">Lịch trình đã tạo</p>
+        </div>
+        <div class="card p-6 rounded-2xl text-center hover:shadow-lg transition-all">
+          <p class="text-3xl font-serif font-bold text-hue-sunset mb-1">92%</p>
+          <p class="text-xs text-gray-400">Hài lòng với kết quả</p>
+        </div>
+        <div class="card p-6 rounded-2xl text-center hover:shadow-lg transition-all">
+          <p class="text-3xl font-serif font-bold text-hue-sunset mb-1">4.8★</p>
+          <p class="text-xs text-gray-400">Điểm trải nghiệm</p>
+        </div>
+      </div>
+
+      <!-- Reviews -->
+      <div class="flex gap-5 overflow-x-auto pb-4 snap-x snap-mandatory" style="-ms-overflow-style:none;scrollbar-width:none;">
+        <div class="flex-shrink-0 w-[320px] snap-start card p-7 rounded-3xl">
+          <div class="flex gap-0.5 text-yellow-400 mb-4">★★★★★</div>
+          <p class="text-sm text-gray-600 leading-relaxed mb-5 font-light italic">"Lịch trình tự động đổi khi trời mưa là điều mình chưa từng thấy ở bất kỳ app nào. Chuyến đi Huế của mình không bị phá vỡ dù trời mưa cả ngày!"</p>
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center font-bold text-orange-600">T</div>
+            <div><p class="text-sm font-semibold text-gray-800">Thanh Hương</p><p class="text-xs text-gray-400">Du lịch tự túc · Đà Nẵng</p></div>
+          </div>
+        </div>
+        <div class="flex-shrink-0 w-[320px] snap-start card p-7 rounded-3xl">
+          <div class="flex gap-0.5 text-yellow-400 mb-4">★★★★★</div>
+          <p class="text-sm text-gray-600 leading-relaxed mb-5 font-light italic">"Mình đi cả gia đình 5 người, từ ông bà đến các bé 5 tuổi. App sắp xếp hợp lý từng điểm, phù hợp tất cả mọi người — điều mình tưởng là không thể."</p>
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center font-bold text-blue-600">M</div>
+            <div><p class="text-sm font-semibold text-gray-800">Minh Anh</p><p class="text-xs text-gray-400">Gia đình · TP.HCM</p></div>
+          </div>
+        </div>
+        <div class="flex-shrink-0 w-[320px] snap-start card p-7 rounded-3xl">
+          <div class="flex gap-0.5 text-yellow-400 mb-4">★★★★☆</div>
+          <p class="text-sm text-gray-600 leading-relaxed mb-5 font-light italic">"Lần đầu đến Huế, không biết gì hết. HueViVu như một người bạn địa phương dẫn mình khám phá những góc nhỏ mà tour thông thường không bao giờ đến."</p>
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center font-bold text-green-600">L</div>
+            <div><p class="text-sm font-semibold text-gray-800">Linh Nhi</p><p class="text-xs text-gray-400">Lần đầu đến Huế · Hà Nội</p></div>
+          </div>
+        </div>
+        <div class="flex-shrink-0 w-[320px] snap-start card p-7 rounded-3xl">
+          <div class="flex gap-0.5 text-yellow-400 mb-4">★★★★★</div>
+          <p class="text-sm text-gray-600 leading-relaxed mb-5 font-light italic">"Nhóm 6 bạn, ai cũng có sở thích khác nhau. HueViVu gợi ý lịch trình mà cả nhóm đều OK — không ai phải nhường ai cả. Tuyệt vời!"</p>
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center font-bold text-purple-600">K</div>
+            <div><p class="text-sm font-semibold text-gray-800">Kiều My</p><p class="text-xs text-gray-400">Nhóm bạn · Hội An</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- PARTNERS                                             -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <section id="partners" class="py-20 px-5 sm:px-8 bg-white overflow-hidden">
+    <div class="max-w-5xl mx-auto">
+      <div class="text-center mb-12">
+        <p class="text-hue-sunset text-sm font-semibold uppercase tracking-widest mb-3">Hệ sinh thái</p>
+        <h2 class="text-3xl font-serif text-hue-purple mb-4">Đối tác địa phương tại Huế</h2>
+      </div>
+
+      <!-- Marquee -->
+      <div class="relative mb-12 overflow-hidden">
+        <div class="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-white to-transparent z-10"></div>
+        <div class="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-white to-transparent z-10"></div>
+        <div class="flex animate-marquee whitespace-nowrap">
+          <div class="flex gap-4 px-2">
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600 hover:shadow-md transition-shadow">🏠 Homestay</span>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600 hover:shadow-md transition-shadow">🏨 Khách sạn nhỏ</span>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600 hover:shadow-md transition-shadow">🍜 Quán ăn</span>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600 hover:shadow-md transition-shadow">☕ Quán cà phê</span>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600 hover:shadow-md transition-shadow">🎁 Đặc sản Huế</span>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600 hover:shadow-md transition-shadow">🚕 Dịch vụ du lịch</span>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600 hover:shadow-md transition-shadow">🛶 Thuyền rồng</span>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600 hover:shadow-md transition-shadow">📸 Nhiếp ảnh</span>
+          </div>
+          <div class="flex gap-4 px-2" aria-hidden>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600">🏠 Homestay</span>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600">🏨 Khách sạn nhỏ</span>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600">🍜 Quán ăn</span>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600">☕ Quán cà phê</span>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600">🎁 Đặc sản Huế</span>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600">🚕 Dịch vụ du lịch</span>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600">🛶 Thuyền rồng</span>
+            <span class="inline-flex items-center gap-2 px-5 py-3 card rounded-full text-sm font-medium text-gray-600">📸 Nhiếp ảnh</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Partner CTA -->
+      <div class="max-w-xl mx-auto card p-8 rounded-3xl text-center">
+        <div class="w-12 h-12 bg-hue-sand rounded-2xl flex items-center justify-center text-2xl mx-auto mb-4">🏪</div>
+        <h3 class="text-xl font-serif text-hue-purple mb-2">Bạn kinh doanh tại Huế?</h3>
+        <p class="text-sm text-gray-400 mb-6 font-light leading-relaxed">Tiếp cận khách du lịch đang thực sự tìm kiếm trải nghiệm của bạn. Trở thành đối tác thử nghiệm ngay hôm nay.</p>
+        <a href="mailto:partner@huevivu.vn" class="inline-flex px-7 py-3 border-2 border-hue-sunset text-hue-sunset rounded-full font-medium hover:bg-hue-sunset hover:text-white transition-all duration-300">
+          Đăng ký đối tác 🤝
+        </a>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- CTA — Cảm xúc, ấm áp, kêu gọi hành động           -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <section id="cta" class="relative py-32 px-5 sm:px-8 overflow-hidden">
+    <!-- Mood background -->
+    <div class="absolute inset-0 bg-hue-purple"></div>
+    <div class="absolute top-0 left-0 w-full h-full opacity-20" style="background-image:url('data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'1\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');"></div>
+    <div class="absolute top-0 left-1/3 w-96 h-96 bg-hue-sunset rounded-full blur-[120px] opacity-20"></div>
+    <div class="absolute bottom-0 right-0 w-80 h-80 bg-blue-500 rounded-full blur-[100px] opacity-10"></div>
+
+    <div class="max-w-3xl mx-auto text-center relative z-10">
+      <!-- Quote -->
+      <p class="text-white/50 text-sm font-light italic mb-8 max-w-lg mx-auto leading-relaxed">
+        "Huế là nơi thời gian chậm lại. Hãy để HueViVu giữ cho bạn không phải lo gì khác ngoài việc cảm nhận."
+      </p>
+
+      <div class="w-14 h-14 mx-auto bg-white/10 rounded-full flex items-center justify-center mb-8 border border-white/20">
+        <span class="text-2xl">🏮</span>
+      </div>
+
+      <h2 class="text-4xl sm:text-5xl lg:text-6xl font-serif text-white mb-6 leading-[1.1]">
+        Sẵn sàng để Huế<br>
+        <em class="text-hue-sunset not-italic">thực sự chạm vào bạn?</em>
+      </h2>
+
+      <p class="text-white/60 font-light text-lg mb-10 max-w-md mx-auto leading-relaxed">
+        Bỏ lại những âu lo lập kế hoạch. Chỉ cần mang theo một tâm hồn rộng mở.
+      </p>
+
+      <a href="#" class="inline-flex px-10 py-5 bg-white text-hue-purple rounded-full font-semibold text-lg shadow-2xl hover:shadow-[0_20px_60px_rgba(0,0,0,0.3)] hover:-translate-y-1 transition-all duration-300">
+        Khởi tạo hành trình của bạn 🚀
+      </a>
+
+      <p class="text-white/30 text-sm mt-6 font-light">Miễn phí thử nghiệm · Không cần thẻ tín dụng · MVP T9/2026</p>
+
+      <!-- Social proof mini -->
+      <div class="mt-10 flex items-center justify-center gap-4">
+        <div class="flex -space-x-2">
+          <div class="w-8 h-8 rounded-full bg-orange-300 border-2 border-white/20 flex items-center justify-center text-xs font-bold">T</div>
+          <div class="w-8 h-8 rounded-full bg-blue-300 border-2 border-white/20 flex items-center justify-center text-xs font-bold">M</div>
+          <div class="w-8 h-8 rounded-full bg-green-300 border-2 border-white/20 flex items-center justify-center text-xs font-bold">L</div>
+          <div class="w-8 h-8 rounded-full bg-purple-300 border-2 border-white/20 flex items-center justify-center text-xs font-bold">K</div>
+        </div>
+        <p class="text-white/50 text-sm font-light">Cùng 300+ người đã tham gia thử nghiệm</p>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- FOOTER                                               -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <footer class="py-10 px-5 sm:px-8 bg-gray-950 text-gray-500">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-5">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 bg-hue-sunset rounded-xl flex items-center justify-center text-white font-serif font-bold text-sm">H</div>
+        <div>
+          <span class="text-white font-serif font-semibold">HueViVu</span>
+          <p class="text-xs text-gray-600 mt-0.5">© 2026. Chế tác bằng cả tấm lòng tại xứ Huế. ❤️</p>
+        </div>
+      </div>
+      <div class="flex gap-6 text-sm">
+        <a href="#" class="hover:text-white transition-colors">Về chúng tôi</a>
+        <a href="#partners" class="hover:text-white transition-colors">Đối tác</a>
+        <a href="mailto:hello@huevivu.vn" class="hover:text-white transition-colors">Liên hệ</a>
+        <a href="#" class="hover:text-white transition-colors">Quyền riêng tư</a>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

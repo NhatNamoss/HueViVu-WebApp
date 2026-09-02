@@ -1,0 +1,892 @@
+[
+  {
+    "id": "dd-dt01",
+    "name": "Đại Nội Huế (Hoàng Thành)",
+    "category": "heritage",
+    "lat": 16.4698,
+    "lng": 107.5784,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt02",
+    "name": "Lăng Tự Đức (Khiêm Lăng)",
+    "category": "heritage",
+    "lat": 16.458,
+    "lng": 107.56,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt03",
+    "name": "Lăng Khải Định (Ứng Lăng)",
+    "category": "heritage",
+    "lat": 16.405,
+    "lng": 107.587,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt04",
+    "name": "Lăng Minh Mạng (Hiếu Lăng)",
+    "category": "heritage",
+    "lat": 16.433,
+    "lng": 107.549,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt05",
+    "name": "Chùa Thiên Mụ",
+    "category": "temple",
+    "lat": 16.4535,
+    "lng": 107.5467,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt06",
+    "name": "Cung An Định",
+    "category": "heritage",
+    "lat": 16.464,
+    "lng": 107.587,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt07",
+    "name": "Đàn Nam Giao",
+    "category": "heritage",
+    "lat": 16.449,
+    "lng": 107.579,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt08",
+    "name": "Chùa Từ Hiếu",
+    "category": "temple",
+    "lat": 16.4459,
+    "lng": 107.5628,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt09",
+    "name": "Trường THPT Chuyên  Quốc Học - Huế",
+    "category": "heritage",
+    "lat": 16.4627,
+    "lng": 107.5907,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt10",
+    "name": "Cầu Tràng Tiền (Trường Tiền)",
+    "category": "heritage",
+    "lat": 16.4618,
+    "lng": 107.5861,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt11",
+    "name": "Chợ Đông Ba",
+    "category": "market",
+    "lat": 16.468,
+    "lng": 107.593,
+    "rating": 4.5,
+    "avg_visit_min": 60,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt12",
+    "name": "Làng Hương Thủy Xuân",
+    "category": "craft_village",
+    "lat": 16.443,
+    "lng": 107.569,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt13",
+    "name": "Cầu Ngói Thanh Toàn",
+    "category": "heritage",
+    "lat": 16.417,
+    "lng": 107.634,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt14",
+    "name": "Đồi Vọng Cảnh",
+    "category": "nature",
+    "lat": 16.438,
+    "lng": 107.559,
+    "rating": 4.5,
+    "avg_visit_min": 45,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt15",
+    "name": "Phu Văn Lâu",
+    "category": "heritage",
+    "lat": 16.4661,
+    "lng": 107.5812,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt16",
+    "name": "Nghinh Lương Đình",
+    "category": "heritage",
+    "lat": 16.4665,
+    "lng": 107.5815,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt17",
+    "name": "Lăng Đồng Khánh",
+    "category": "heritage",
+    "lat": 16.451,
+    "lng": 107.567,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt18",
+    "name": "Lăng Thiệu Trị",
+    "category": "heritage",
+    "lat": 16.42,
+    "lng": 107.57,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt19",
+    "name": "Lăng Dục Đức",
+    "category": "heritage",
+    "lat": 16.457,
+    "lng": 107.586,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt21",
+    "name": "Chùa Huyền Không Sơn Thượng",
+    "category": "temple",
+    "lat": 16.43,
+    "lng": 107.54,
+    "rating": 4.5,
+    "avg_visit_min": 60,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt22",
+    "name": "Chùa Thiền Lâm",
+    "category": "temple",
+    "lat": 16.442,
+    "lng": 107.565,
+    "rating": 4.5,
+    "avg_visit_min": 60,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt23",
+    "name": "Chùa Báo Quốc",
+    "category": "temple",
+    "lat": 16.458,
+    "lng": 107.58,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt24",
+    "name": "Ga Huế",
+    "category": "architecture",
+    "lat": 16.459,
+    "lng": 107.583,
+    "rating": 4.5,
+    "avg_visit_min": 60,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt25",
+    "name": "Phố cổ Bao Vinh",
+    "category": "heritage",
+    "lat": 16.478,
+    "lng": 107.583,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt26",
+    "name": "Văn Thánh Huế",
+    "category": "heritage",
+    "lat": 16.464,
+    "lng": 107.565,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt27",
+    "name": "Điện Hòn Chén",
+    "category": "temple",
+    "lat": 16.44,
+    "lng": 107.545,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt29",
+    "name": "Trường THPT Hai Bà Trưng",
+    "category": "heritage",
+    "lat": 16.461,
+    "lng": 107.589,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt30",
+    "name": "Không gian Ký ức Lê Bá Đảng",
+    "category": "architecture",
+    "lat": 16.41,
+    "lng": 107.59,
+    "rating": 4.5,
+    "avg_visit_min": 60,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt31",
+    "name": "Bến thuyền Tòa Khâm",
+    "category": "nature",
+    "lat": 16.4625,
+    "lng": 107.5875,
+    "rating": 4.5,
+    "avg_visit_min": 45,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt32",
+    "name": "Trung tâm Nghệ thuật Điềm Phùng Thị",
+    "category": "art",
+    "lat": 16.4638,
+    "lng": 107.588,
+    "rating": 4.5,
+    "avg_visit_min": 60,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt33",
+    "name": "Làng hoa giấy Thanh Tiên",
+    "category": "craft_village",
+    "lat": 16.39,
+    "lng": 107.62,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt34",
+    "name": "Chùa Diệu Đế",
+    "category": "temple",
+    "lat": 16.465,
+    "lng": 107.59,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt35",
+    "name": "Hồ Thủy Tiên",
+    "category": "nature",
+    "lat": 16.415,
+    "lng": 107.575,
+    "rating": 4.5,
+    "avg_visit_min": 45,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt36",
+    "name": "Đền Huyền Trân Công Chúa",
+    "category": "temple",
+    "lat": 16.435,
+    "lng": 107.562,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "dd-dt37",
+    "name": "Nhà vườn An Hiên",
+    "category": "heritage",
+    "lat": 16.452,
+    "lng": 107.551,
+    "rating": 4.5,
+    "avg_visit_min": 120,
+    "popularity": 0.5
+  },
+  {
+    "id": "at-01",
+    "name": "Bún bò Bà Tuyết",
+    "category": "food",
+    "lat": 16.4477,
+    "lng": 107.5999,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-02",
+    "name": "Hẻm Huế - Nướng than",
+    "category": "food",
+    "lat": 16.4447,
+    "lng": 107.5969,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-03",
+    "name": "Hẻm Huế - Nướng bơ",
+    "category": "food",
+    "lat": 16.4477,
+    "lng": 107.5999,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-04",
+    "name": "Quán chay Thanh Liễu",
+    "category": "food",
+    "lat": 16.4417,
+    "lng": 107.5839,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-05",
+    "name": "Quán Thúy - bánh Nam Phổ",
+    "category": "food",
+    "lat": 16.4827,
+    "lng": 107.6049,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-06",
+    "name": "O Cương Chú Điệp - quán bún bò Huế",
+    "category": "food",
+    "lat": 16.4667,
+    "lng": 107.5989,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-07",
+    "name": "Bánh Bà Đỏ",
+    "category": "food",
+    "lat": 16.4442,
+    "lng": 107.6064,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-08",
+    "name": "Nem lụi Tài Phú",
+    "category": "food",
+    "lat": 16.4802,
+    "lng": 107.5924,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-09",
+    "name": "Cơm chay Liên Hoa",
+    "category": "food",
+    "lat": 16.4592,
+    "lng": 107.5714,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-10",
+    "name": "Bánh canh cá lóc Bình",
+    "category": "food",
+    "lat": 16.4522,
+    "lng": 107.5744,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-11",
+    "name": "Nhà hàng Cung Đình",
+    "category": "food",
+    "lat": 16.4762,
+    "lng": 107.5784,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-13",
+    "name": "Cơm Huế O Én",
+    "category": "food",
+    "lat": 16.4842,
+    "lng": 107.6064,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-14",
+    "name": "Tiệm cơm Hồi Nớ",
+    "category": "food",
+    "lat": 16.4487,
+    "lng": 107.6009,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-15",
+    "name": "Quán bánh Chi",
+    "category": "food",
+    "lat": 16.4572,
+    "lng": 107.6094,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-16",
+    "name": "Bánh xèo quán Mộc",
+    "category": "food",
+    "lat": 16.4702,
+    "lng": 107.5924,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-17",
+    "name": "Bánh khoái Hồng Mai",
+    "category": "food",
+    "lat": 16.4452,
+    "lng": 107.5874,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-18",
+    "name": "Nem lụi Ôn Mệ",
+    "category": "food",
+    "lat": 16.4587,
+    "lng": 107.5809,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-19",
+    "name": "Bún bò O Liễu",
+    "category": "food",
+    "lat": 16.4407,
+    "lng": 107.5829,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-20",
+    "name": "Chè Thanh",
+    "category": "food",
+    "lat": 16.4652,
+    "lng": 107.5774,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-21",
+    "name": "Chè Ông Lạc",
+    "category": "food",
+    "lat": 16.4537,
+    "lng": 107.5959,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "at-22",
+    "name": "Đậu hủ cô Tâm chùa",
+    "category": "food",
+    "lat": 16.4827,
+    "lng": 107.6049,
+    "rating": 4.3,
+    "avg_visit_min": 45,
+    "popularity": 0.4
+  },
+  {
+    "id": "cf-01",
+    "name": "Quán Cafe Mắt Biếc",
+    "category": "cafe",
+    "lat": 16.4453,
+    "lng": 107.5905,
+    "rating": 4.4,
+    "avg_visit_min": 60,
+    "popularity": 0.4
+  },
+  {
+    "id": "cf-02",
+    "name": "Tân Cafe",
+    "category": "cafe",
+    "lat": 16.4497,
+    "lng": 107.5949,
+    "rating": 4.4,
+    "avg_visit_min": 60,
+    "popularity": 0.4
+  },
+  {
+    "id": "cf-03",
+    "name": "Tiệm Cà Phê Cấp Tới",
+    "category": "cafe",
+    "lat": 16.4685,
+    "lng": 107.5777,
+    "rating": 4.4,
+    "avg_visit_min": 60,
+    "popularity": 0.4
+  },
+  {
+    "id": "cf-04",
+    "name": "La Gare Bistro",
+    "category": "cafe",
+    "lat": 16.4513,
+    "lng": 107.5845,
+    "rating": 4.4,
+    "avg_visit_min": 60,
+    "popularity": 0.4
+  },
+  {
+    "id": "cf-05",
+    "name": "Vỹ Dạ Xưa Cafe",
+    "category": "cafe",
+    "lat": 16.4505,
+    "lng": 107.5957,
+    "rating": 4.4,
+    "avg_visit_min": 60,
+    "popularity": 0.4
+  },
+  {
+    "id": "cf-06",
+    "name": "Nghĩa Cafe",
+    "category": "cafe",
+    "lat": 16.4773,
+    "lng": 107.5745,
+    "rating": 4.4,
+    "avg_visit_min": 60,
+    "popularity": 0.4
+  },
+  {
+    "id": "cf-07",
+    "name": "The Time Coffee",
+    "category": "cafe",
+    "lat": 16.4497,
+    "lng": 107.5829,
+    "rating": 4.4,
+    "avg_visit_min": 60,
+    "popularity": 0.4
+  },
+  {
+    "id": "cf-08",
+    "name": "Mộc Trà Cốc",
+    "category": "cafe",
+    "lat": 16.4733,
+    "lng": 107.5825,
+    "rating": 4.4,
+    "avg_visit_min": 60,
+    "popularity": 0.4
+  },
+  {
+    "id": "cf-09",
+    "name": "Giao Cafe",
+    "category": "cafe",
+    "lat": 16.4789,
+    "lng": 107.5881,
+    "rating": 4.4,
+    "avg_visit_min": 60,
+    "popularity": 0.4
+  },
+  {
+    "id": "cf-10",
+    "name": "Đội Cafe",
+    "category": "cafe",
+    "lat": 16.4589,
+    "lng": 107.5801,
+    "rating": 4.4,
+    "avg_visit_min": 60,
+    "popularity": 0.4
+  },
+  {
+    "id": "cf-11",
+    "name": "Sline Cafe Bar",
+    "category": "cafe",
+    "lat": 16.4521,
+    "lng": 107.5973,
+    "rating": 4.4,
+    "avg_visit_min": 60,
+    "popularity": 0.4
+  },
+  {
+    "id": "cf-12",
+    "name": "Truong Tien Coffee & tea",
+    "category": "cafe",
+    "lat": 16.4557,
+    "lng": 107.5889,
+    "rating": 4.4,
+    "avg_visit_min": 60,
+    "popularity": 0.4
+  },
+  {
+    "id": "cf-13",
+    "name": "Quán cà phê chiều",
+    "category": "cafe",
+    "lat": 16.4873,
+    "lng": 107.5965,
+    "rating": 4.4,
+    "avg_visit_min": 60,
+    "popularity": 0.4
+  },
+  {
+    "id": "qun_ng_7800",
+    "name": "Quán Ngỏ",
+    "category": "food",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "bnh_canh_o_hoa_3723",
+    "name": "Bánh Canh O Hoa",
+    "category": "food",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "qun_cht__cm_mt__4162",
+    "name": "Quán Chất ( Cơm Mẹt )",
+    "category": "food",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "ch_thch_xoa_d_liu_8071",
+    "name": "Chè Thạch Xoa Dì Liễu",
+    "category": "food",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "bn_b_o_vy__1533",
+    "name": "Bún Bò O Vầy ",
+    "category": "food",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "bn_b_o_vy__2458",
+    "name": "Bún Bò O Vầy ",
+    "category": "food",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "tu_h__di_cha_thin_m__5674",
+    "name": "Tàu Hũ ( Dưới Chùa Thiên Mụ )",
+    "category": "food",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "tu_h__di_cha_thin_m__2858",
+    "name": "Tàu Hũ ( Dưới Chùa Thiên Mụ )",
+    "category": "food",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "ngm_coffee_1487",
+    "name": "Ngâm Coffee",
+    "category": "cafe",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "kodo_2383",
+    "name": "KODO",
+    "category": "cafe",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "c_ph_lu_t_phng_v_s_6032",
+    "name": "Cà Phê Lầu Tứ Phương Vô Sự",
+    "category": "cafe",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "ngm_c_ph_5610",
+    "name": "Ngâm Cà Phê",
+    "category": "cafe",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "lng_hng_thy_xun__4601",
+    "name": "Làng Hương Thủy Xuân ",
+    "category": "heritage",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "cha_thin_m_8330",
+    "name": "Chùa Thiên Mụ",
+    "category": "heritage",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "i_ni_hu_1721",
+    "name": "Đại Nội Huế",
+    "category": "heritage",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "lng_thiu_tr__8909",
+    "name": "Lăng Thiệu Trị ",
+    "category": "heritage",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "lng_khi_nh__2660",
+    "name": "Lăng Khải Định ",
+    "category": "heritage",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "i_vng_cnh_9300",
+    "name": "Đồi Vọng Cảnh",
+    "category": "nature",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "cha_t_hiu_0394",
+    "name": "Chùa Từ Hiếu",
+    "category": "heritage",
+    "lat": 1,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  },
+  {
+    "id": "a_7919",
+    "name": "a",
+    "category": "food",
+    "lat": 16.4637,
+    "lng": 107.5909,
+    "rating": 4.5,
+    "avg_visit_min": 90,
+    "popularity": 0.9
+  }
+]

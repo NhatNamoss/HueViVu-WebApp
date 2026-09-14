@@ -9,3 +9,4 @@ const places = db.prepare("SELECT id, name, category, lat, lng, rating, avg_visi
 
 fs.writeFileSync(path.join(process.cwd(), 'algorithm/places.json'), JSON.stringify(places, null, 2));
 console.log('Exported places.json');
+

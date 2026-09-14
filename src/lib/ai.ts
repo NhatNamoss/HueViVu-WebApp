@@ -101,6 +101,52 @@ async function callMessages({ model, max_tokens, temperature, system, messages, 
   }
 }
 
+// ── Geo Cluster: gom địa điểm theo khu vực địa lý ────────────────────────────
+// Greedy nearest-neighbor: chọn seed → gom các điểm trong bán kính 3.5km
+function clusterByArea(places: any[], numDays: number): any[][] {
+  const distKm = (a: any, b: any) => {
+    const R = 6371;
+    const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+    const x = Math.sin(dLat / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  };
+  const RADIUS_KM = 3.5;
+  const remaining = [...places];
+  const clusters: any[][] = [];
+  while (remaining.length > 0 && clusters.length < numDays) {
+    remaining.sort((a, b) => (b.popularity || 0.5) - (a.popularity || 0.5));
+    const seed = remaining.shift()!;
+    const cluster = [seed];
+    for (let i = remaining.length - 1; i >= 0; i--) {
+      if (distKm(seed, remaining[i]) <= RADIUS_KM) cluster.push(remaining.splice(i, 1)[0]);
+    }
+    clusters.push(cluster);
+  }
+  if (remaining.length > 0) {
+    for (const p of remaining) {
+      let minDist = Infinity, bestIdx = 0;
+      clusters.forEach((c, i) => { const d = distKm(p, c[0]); if (d < minDist) { minDist = d; bestIdx = i; } });
+      clusters[bestIdx].push(p);
+    }
+  }
+  while (clusters.length < numDays) clusters.push([]);
+  return clusters.slice(0, numDays);
+}
+
+function nearestOf(cluster: any[], pool: any[]): any | null {
+  if (!pool.length) return null;
+  const distKm = (a: any, b: any) => {
+    const R = 6371;
+    const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+    const x = Math.sin(dLat / 2) ** 2 + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  };
+  const center = cluster[0] || { lat: 16.4637, lng: 107.5909 };
+  return pool.reduce((best, p) => distKm(center, p) < distKm(center, best) ? p : best);
+}
+
 // ── Local Fallback Trip Generator ────────────────────────────────────────────
 function generateLocalFallbackTrip({ duration, styles, companion, budget, food }: {
   duration: number; styles: string | string[];
@@ -110,40 +156,48 @@ function generateLocalFallbackTrip({ duration, styles, companion, budget, food }
   const allPlaces = db.prepare('SELECT * FROM places').all() as any[];
   const dur = Number(duration) || 2;
 
-  const heritages = allPlaces.filter(p => p.category === 'heritage' || p.category === 'temple');
-  const foods = allPlaces.filter(p => p.category === 'food' || p.category === 'market');
+  const sightseeing = allPlaces.filter(p => ['heritage', 'temple', 'nature', 'craft_village', 'experience'].includes(p.category));
+  const foods = allPlaces.filter(p => ['food', 'market'].includes(p.category));
   const cafes = allPlaces.filter(p => p.category === 'cafe');
-  const natures = allPlaces.filter(p => p.category === 'nature' || p.category === 'craft_village');
 
-  const days = [];
+  const clusters = clusterByArea(sightseeing, dur);
+  const usedFoodIds = new Set<string>();
+  const usedCafeIds = new Set<string>();
   const highlights: string[] = [];
+  const days = [];
 
-  for (let i = 1; i <= dur; i++) {
+  for (let i = 0; i < dur; i++) {
+    const cluster = clusters[i] || [];
     const dayActivities = [];
+    const [morning, midmorning, afternoon3] = cluster;
 
-    const morningPlace = heritages[(i - 1) % heritages.length] || allPlaces[0];
-    if (morningPlace && !highlights.includes(morningPlace.name)) highlights.push(morningPlace.name);
-    dayActivities.push({ time: '08:00', name: morningPlace?.name || 'Đại Nội Huế', type: morningPlace?.category || 'heritage', duration: morningPlace?.duration || '2 giờ', cost: morningPlace?.price || '150,000 VNĐ', description: morningPlace?.description || 'Tham quan di tích lịch sử đặc sắc của Huế.', ai_tip: 'Nên đi sớm để tránh nắng và có ảnh đẹp.', location: morningPlace?.address || 'TP. Huế' });
+    if (morning) {
+      if (highlights.length < 3) highlights.push(morning.name);
+      dayActivities.push({ time: '08:00', name: morning.name, type: morning.category, duration: morning.duration || '2 giờ', cost: morning.price || 'Miễn phí', description: morning.description || '', ai_tip: 'Nên đi sớm để tránh nắng.', location: morning.address || 'TP. Huế' });
+    }
+    if (midmorning) {
+      dayActivities.push({ time: '10:30', name: midmorning.name, type: midmorning.category, duration: midmorning.duration || '1.5 giờ', cost: midmorning.price || 'Miễn phí', description: midmorning.description || '', ai_tip: '', location: midmorning.address || 'TP. Huế' });
+    }
+    const lunch = nearestOf(cluster, foods.filter(p => !usedFoodIds.has(p.id)));
+    if (lunch) { usedFoodIds.add(lunch.id); dayActivities.push({ time: '12:00', name: lunch.name, type: 'food', duration: '1 giờ', cost: lunch.price || '50,000 VNĐ', description: lunch.description || '', ai_tip: '', location: lunch.address || 'TP. Huế' }); }
+    if (afternoon3) {
+      dayActivities.push({ time: '14:00', name: afternoon3.name, type: afternoon3.category, duration: afternoon3.duration || '1.5 giờ', cost: afternoon3.price || 'Miễn phí', description: afternoon3.description || '', ai_tip: '', location: afternoon3.address || 'TP. Huế' });
+    }
+    const cafe = nearestOf(cluster, cafes.filter(p => !usedCafeIds.has(p.id)));
+    if (cafe) { usedCafeIds.add(cafe.id); dayActivities.push({ time: afternoon3 ? '16:00' : '14:00', name: cafe.name, type: 'cafe', duration: '1.5 giờ', cost: cafe.price || '40,000 VNĐ', description: cafe.description || '', ai_tip: '', location: cafe.address || 'TP. Huế' }); }
+    const dinner = nearestOf(cluster, foods.filter(p => !usedFoodIds.has(p.id)));
+    if (dinner) { usedFoodIds.add(dinner.id); dayActivities.push({ time: '18:30', name: dinner.name, type: 'food', duration: '1.5 giờ', cost: dinner.price || '60,000 VNĐ', description: dinner.description || '', ai_tip: '', location: dinner.address || 'TP. Huế' }); }
 
-    const lunchPlace = foods[(i - 1) * 2 % foods.length] || allPlaces[1];
-    if (lunchPlace && highlights.length < 3 && !highlights.includes(lunchPlace.name)) highlights.push(lunchPlace.name);
-    dayActivities.push({ time: '11:30', name: lunchPlace?.name || 'Bún Bò Bà Tuyết', type: 'food', duration: '1.5 giờ', cost: lunchPlace?.price || '45,000 VNĐ', description: lunchPlace?.description || 'Thưởng thức ẩm thực đặc sản bản địa Huế.', ai_tip: 'Nên thử nước dùng ninh và bắp bò gia truyền.', location: lunchPlace?.address || 'TP. Huế' });
-
-    const afternoonPlace = i % 2 === 1 ? (cafes[(i - 1) % cafes.length] || allPlaces[2]) : (natures[(i - 1) % natures.length] || allPlaces[3]);
-    dayActivities.push({ time: '15:00', name: afternoonPlace?.name || 'The Time Coffee', type: afternoonPlace?.category || 'cafe', duration: '2 giờ', cost: afternoonPlace?.price || '40,000 VNĐ', description: afternoonPlace?.description || 'Thư giãn trong không gian đậm chất Huế.', ai_tip: 'Góc chụp ảnh hoàng hôn cực thơ mộng.', location: afternoonPlace?.address || 'TP. Huế' });
-
-    const dinnerPlace = foods[((i - 1) * 2 + 1) % foods.length] || allPlaces[4];
-    dayActivities.push({ time: '18:30', name: dinnerPlace?.name || 'Cơm Hến Bà Cẩm', type: 'food', duration: '2 giờ', cost: dinnerPlace?.price || '35,000 VNĐ', description: dinnerPlace?.description || 'Trải nghiệm ẩm thực về đêm và dạo phố Huế.', ai_tip: 'Ớt khá cay, hỏi trước khi gia giảm.', location: dinnerPlace?.address || 'TP. Huế' });
-
-    days.push({ day: i, theme: i === 1 ? 'Dấu ấn Hoàng thành & Ẩm thực Cố đô' : i === 2 ? 'Lăng tẩm hoàng gia & Không gian hoài cổ' : `Ngày ${i}: Khám phá chất Huế sâu lắng`, day_tip: i === 1 ? 'Nên mặc trang phục lịch sự khi vào Đại Nội và các di tích.' : 'Buổi chiều thời tiết mát mẻ rất thích hợp đi dạo ven sông.', activities: dayActivities });
+    const areaName = morning?.address?.split(',').slice(-2).join(',').trim() || 'TP. Huế';
+    days.push({ day: i + 1, theme: i === 0 ? 'Dấu ấn Hoàng thành & Ẩm thực Cố đô' : i === 1 ? 'Lăng tẩm hoàng gia & Sông Hương' : `Khám phá ${areaName}`, day_tip: 'Các điểm trong ngày nằm gần nhau, di chuyển tối ưu.', activities: dayActivities });
   }
 
   return {
     title: `Hành trình Cố đô Huế ${dur} ngày 100% bản địa`,
-    summary: `Chuyến đi ${dur} ngày được tối ưu cho phong cách ${Array.isArray(styles) ? styles.join(', ') : (styles || 'khám phá')}, kết hợp hài hòa giữa di tích lịch sử hoàng gia và ẩm thực đường phố đặc sắc.`,
+    summary: `Chuyến đi ${dur} ngày tối ưu địa lý, mỗi ngày khám phá một khu vực riêng — di chuyển tối thiểu, trải nghiệm tối đa.`,
     total_cost_estimate: `${Number(budget || 2000000).toLocaleString('vi-VN')} VNĐ`,
     highlights: highlights.slice(0, 3),
-    ai_insight: '✨ (Chế độ Local Engine) Lịch trình được tổng hợp tự động từ cơ sở dữ liệu địa điểm bản địa Huế của HueViVu, tối ưu khoảng cách di chuyển và giờ mở cửa.',
+    ai_insight: '✨ Lịch trình gom cụm theo khu vực địa lý, mỗi ngày các điểm nằm trong bán kính ≤3.5km.',
     days,
   };
 }
@@ -155,6 +209,7 @@ export async function generateTrip({ duration, styles, companion, budget, food, 
 }): Promise<any> {
   const styleStr = Array.isArray(styles) ? styles.join(', ') : (styles || 'general');
   const foodStr = Array.isArray(food) ? food.join(', ') : (food || 'all');
+  const dur = Number(duration) || 2;
 
   let personalizationSection = '';
   if (userContext?.personalized) {
@@ -165,43 +220,33 @@ export async function generateTrip({ duration, styles, companion, budget, food, 
     if (lines.length > 0) personalizationSection = `\n\n⚠️ DỮ LIỆU CÁ NHÂN HÓA:\n${lines.join('\n')}`;
   }
 
-  const prompt = `Bạn là HueViVu AI, chuyên gia du lịch Huế, Việt Nam.
-Hãy tạo lịch trình du lịch cá nhân hóa với thông tin sau:
-- Thời gian: ${duration} ngày
-- Phong cách: ${styleStr}
-- Đi cùng: ${companion}
-- Ngân sách: ${Number(budget).toLocaleString('vi-VN')} VNĐ (tổng ${duration} ngày)
-- Ẩm thực: ${foodStr}${personalizationSection}
+  // Gom địa điểm theo cụm địa lý TRƯỚC — AI chỉ cần điền theme/mô tả, không tự quyết địa lý
+  const db = getDb();
+  const allPlaces = db.prepare('SELECT id, name, category, address, price, lat, lng, avg_visit_min, popularity FROM places').all() as any[];
+  const sightseeing = allPlaces.filter((p: any) => ['heritage', 'temple', 'nature', 'craft_village', 'experience'].includes(p.category));
+  const foods = allPlaces.filter((p: any) => ['food', 'market'].includes(p.category));
+  const cafes = allPlaces.filter((p: any) => p.category === 'cafe');
 
-Tạo lịch trình thực tế và cụ thể. Ưu tiên địa điểm bản địa Huế, tránh nơi quá đông khách. Ghi đúng giờ mở cửa, giá vé, địa chỉ thực tế.
+  const clusters = clusterByArea(sightseeing, dur);
 
-Trả về JSON HỢP LỆ (không có markdown, không có text thừa):
-{
-  "title": "Tên chuyến đi đầy cảm hứng",
-  "summary": "1-2 câu tóm tắt phong cách và điểm nhấn chuyến đi",
-  "total_cost_estimate": "Ước tính chi phí (ví dụ: 2,500,000 VNĐ)",
-  "highlights": ["3-4 điểm nổi bật nhất chuyến đi"],
-  "ai_insight": "1 câu nhận xét thông minh lý do lịch trình này hợp với người dùng",
-  "days": [
-    {
-      "day": 1,
-      "theme": "Chủ đề ngày (ví dụ: Hoàng thành & Vị Huế xưa)",
-      "day_tip": "Lời khuyên thực tế cho ngày này",
-      "activities": [
-        {
-          "time": "07:30",
-          "name": "Tên địa điểm/hoạt động",
-          "type": "heritage|food|nature|cafe|experience|temple|market",
-          "duration": "2 giờ",
-          "cost": "25,000 VNĐ",
-          "description": "Mô tả ngắn hấp dẫn",
-          "ai_tip": "Mẹo bản địa cụ thể",
-          "location": "Địa chỉ thực tế tại Huế"
-        }
-      ]
-    }
-  ]
-}`;
+  const clusterContext = clusters.slice(0, dur).map((cluster, i) => {
+    const sights = cluster.map((p: any) => `  - ${p.name} (${p.category}, ${p.address || 'Huế'}, giá: ${p.price || 'Miễn phí'})`).join('\n');
+    const center = cluster[0] || { lat: 16.4637, lng: 107.5909 };
+    const nearFoods = [...foods].sort((a: any, b: any) => Math.hypot(a.lat - center.lat, a.lng - center.lng) - Math.hypot(b.lat - center.lat, b.lng - center.lng)).slice(0, 3).map((p: any) => `  - ${p.name} (${p.address || 'Huế'}, giá: ${p.price || '~50k'})`).join('\n');
+    const nearCafes = [...cafes].sort((a: any, b: any) => Math.hypot(a.lat - center.lat, a.lng - center.lng) - Math.hypot(b.lat - center.lat, b.lng - center.lng)).slice(0, 2).map((p: any) => `  - ${p.name} (${p.address || 'Huế'}, giá: ${p.price || '~40k'})`).join('\n');
+    const areaName = cluster[0]?.address?.split(',').slice(-2).join(',').trim() || 'TP. Huế';
+    return `NGÀY ${i + 1} — Khu vực: ${areaName}\nĐiểm tham quan (GOM SẴN theo địa lý — KHÔNG tách sang ngày khác):\n${sights || '  (chưa có)'}\nĂn uống gần khu vực:\n${nearFoods || '  (chưa có)'}\nCafe gần khu vực:\n${nearCafes || '  (chưa có)'}`;
+  }).join('\n\n');
+
+  const prompt = `Bạn là HueViVu AI, chuyên gia du lịch Huế.
+Thông tin: ${dur} ngày | Phong cách: ${styleStr} | Đi cùng: ${companion} | Ngân sách: ${Number(budget).toLocaleString('vi-VN')} VNĐ | Ẩm thực: ${foodStr}${personalizationSection}
+
+Địa điểm ĐÃ được gom theo khu vực địa lý. Bạn PHẢI dùng đúng danh sách từng ngày, KHÔNG hoán đổi, KHÔNG bịa thêm:
+
+${clusterContext}
+
+Sắp xếp thứ tự hợp lý (sáng → trưa → chiều → tối), đặt theme, viết mô tả và mẹo thực tế.
+Trả về JSON (không markdown): {"title":"...","summary":"...","total_cost_estimate":"...","highlights":["..."],"ai_insight":"...","days":[{"day":1,"theme":"...","day_tip":"...","activities":[{"time":"07:30","name":"...","type":"heritage","duration":"2 giờ","cost":"...","description":"...","ai_tip":"...","location":"..."}]}]}`;
 
   try {
     const text = (await callMessages({ max_tokens: 8192, messages: [{ role: 'user', content: prompt }] })).trim();

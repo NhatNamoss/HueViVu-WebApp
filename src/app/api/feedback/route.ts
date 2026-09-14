@@ -19,3 +19,13 @@ export async function POST(req: NextRequest) {
     return Response.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function GET(req: NextRequest) {
+  try {
+    const db = getDb();
+    const rows = db.prepare(`SELECT * FROM feedback ORDER BY created_at DESC`).all();
+    return Response.json({ feedback: rows });
+  } catch (err: any) {
+    return Response.json({ error: err.message }, { status: 500 });
+  }
+}

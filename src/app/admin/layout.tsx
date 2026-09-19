@@ -13,10 +13,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </div>
           <nav className="flex gap-4">
             <Link href="/admin/data-collector" className="text-sm font-medium text-gray-700 hover:text-orange-500 transition-colors">
-              Places Data Collector
+              📍 Places
             </Link>
             <Link href="/admin/ai-trainer" className="text-sm font-medium text-gray-700 hover:text-orange-500 transition-colors">
-              AI Trainer
+              🤖 AI Trainer
+            </Link>
+            <Link href="/admin/feedback" className="text-sm font-medium text-gray-700 hover:text-orange-500 transition-colors">
+              💬 Feedback
             </Link>
           </nav>
         </div>

@@ -201,6 +201,7 @@ function createSchema(db: Database.Database) {
   addColumnIfMissing(db, 'places', 'taste_profile',     "TEXT");
   addColumnIfMissing(db, 'places', 'dining_style',      "TEXT");
   addColumnIfMissing(db, 'places', 'specialties',       "TEXT");
+  addColumnIfMissing(db, 'places', 'meal_type',         "TEXT"); // breakfast|lunch|dinner|snack|any
 }
 
 function seedData(db: Database.Database) {

@@ -1,252 +1,174 @@
 import { getDb } from './db';
+const SPEED = 25; // km/h nội thành Huế
+const START_H = 7;
+const BUDGET = 840; // 14h: 07:00→21:00
+const MAX_H = 2; // max heritage/day
+const MAX_ST = 6000;
 
-const GRID_SIZE = 0.0045; // ~500m
-const SPEED_KM_H = 30; // Giả sử tốc độ di chuyển trung bình trong thành phố là 30km/h
-
-function distance(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const R = 6371; // km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLng/2) * Math.sin(dLng/2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+function dkm(a1:number,o1:number,a2:number,o2:number){
+  const d1=(a2-a1)*Math.PI/180,d2=(o2-o1)*Math.PI/180;
+  const x=Math.sin(d1/2)**2+Math.cos(a1*Math.PI/180)*Math.cos(a2*Math.PI/180)*Math.sin(d2/2)**2;
+  return 6371*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 }
+function tm(km:number){return(km/SPEED)*60;}
+function ft(m:number){const t=START_H*60+Math.floor(m);return`${(Math.floor(t/60)%24+'').padStart(2,'0')}:${(t%60+'').padStart(2,'0')}`;}
 
-// Tính thời gian di chuyển (phút)
-function travelTime(distKm: number) {
-  return (distKm / SPEED_KM_H) * 60;
-}
+type SN='BREAKFAST'|'MORNING'|'CAFE_BREAK'|'LUNCH'|'SIESTA'|'AFTERNOON'|'LATE_AFT'|'DINNER'|'EVENING';
+const SLOTS:{name:SN;s:number;e:number;pref:string[];req?:'food'|'cafe'}[]=[
+  {name:'BREAKFAST',s:0,e:60,pref:['food'],req:'food'},
+  {name:'MORNING',s:60,e:210,pref:['heritage','temple','nature','craft_village','experience']},
+  {name:'CAFE_BREAK',s:210,e:270,pref:['cafe'],req:'cafe'},
+  {name:'LUNCH',s:270,e:360,pref:['food','market'],req:'food'},
+  {name:'SIESTA',s:360,e:420,pref:['cafe','art','architecture']},
+  {name:'AFTERNOON',s:420,e:570,pref:['heritage','temple','nature','craft_village','experience']},
+  {name:'LATE_AFT',s:570,e:660,pref:['market','cafe','nature','craft_village','art']},
+  {name:'DINNER',s:660,e:720,pref:['food'],req:'food'},
+  {name:'EVENING',s:720,e:840,pref:['market','cafe','experience','nature']},
+];
+function slot(m:number){return SLOTS.find(s=>m>=s.s&&m<s.e)||null;}
+const HC=new Set(['heritage','temple']);
+const FC=new Set(['food','market']);
+const HV=new Set(['heritage','temple','nature','craft_village']);
 
-// Hàng đợi ưu tiên (Min-Heap)
-class PriorityQueue<T> {
-  private items: T[];
-  private compare: (a: T, b: T) => number;
 
-  constructor(compare: (a: T, b: T) => number) {
-    this.items = [];
-    this.compare = compare;
-  }
+class PQ<T>{private i:T[]=[];constructor(private c:(a:T,b:T)=>number){}push(v:T){this.i.push(v);this.i.sort(this.c);}pop(){return this.i.shift();}get empty(){return!this.i.length;}}
 
-  push(item: T) {
-    this.items.push(item);
-    this.items.sort(this.compare); // Đơn giản hóa, dùng sort thay vì cài đặt heap chuẩn
-  }
-
-  pop(): T | undefined {
-    return this.items.shift();
-  }
-
-  isEmpty() {
-    return this.items.length === 0;
-  }
-}
-
-type AStarNode = {
-  currentLat: number;
-  currentLng: number;
-  visitedIds: Set<string>;
-  path: any[];
-  g_cost: number; // Tổng thời gian đã đi (di chuyển + tham quan)
-  h_cost: number; // Điểm Heuristic (ước tính thời gian - bonus)
-  f_cost: number; // g + h
+const TIPS:Record<string,string[]>={
+  heritage:['Mua vé combo di tích tiết kiệm 30%.','Thuê HDV tại chỗ (~100k) hiểu lịch sử.','Đi trước 9h tránh đông, ảnh đẹp.','Mang nước+mũ, khu di tích ít bóng mát.'],
+  temple:['Mặc trang phục kín đáo khi vào chùa.','Đẹp nhất sáng sớm khi sương phủ.','Không gian yên tĩnh, hạn chế nói to.'],
+  food:['Đi sớm trước 7:30 tránh đông.','Gọi thêm rau sống — đặc trưng Huế.','Quán ngon thường đông, kiên nhẫn chờ xứng đáng.'],
+  cafe:['Ngồi tầng 2/ban công view đẹp nhất.','Thử cà phê muối — đặc sản chỉ có ở Huế.','Wifi tốt, nghỉ chân 30-45 phút.'],
+  nature:['Mang giày thoải mái, đường có thể trơn.','Ảnh đẹp nhất sáng sớm hoặc hoàng hôn.','Mang nước và kem chống nắng.'],
+  market:['Trả giá khoảng 70% giá ban đầu.','Đi buổi sáng hàng tươi nhất.'],
+  craft_village:['Đặt trước nếu muốn workshop thủ công.','Thường mất 1-2 tiếng cho trải nghiệm.'],
 };
-
-function formatTime(startHour: number, currentMinutes: number) {
-  const totalMinutes = startHour * 60 + Math.floor(currentMinutes);
-  const h = Math.floor(totalMinutes / 60) % 24;
-  const m = totalMinutes % 60;
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+function gtip(cat:string,sn:SN):string{
+  if(sn==='BREAKFAST'&&FC.has(cat))return'Đi sớm trước 7:30, quán sáng ngon thường hết trước 9h.';
+  if(sn==='DINNER'&&FC.has(cat))return'Thử nem lụi hoặc bánh bèo chén — ăn tối kiểu Huế chính hiệu.';
+  if(sn==='LATE_AFT'&&cat==='nature')return'Golden hour — thời điểm hoàn hảo chụp hoàng hôn bên sông Hương.';
+  if(sn==='EVENING'&&cat==='market')return'Chợ đêm sôi động nhất sau 19:30, thử các món ăn vặt.';
+  const p=TIPS[cat]||['Tận hưởng trải nghiệm!'];return p[Math.floor(Math.random()*p.length)];
 }
 
-export function generateAstarTrip({ duration, styles, companion, budget, food }: {
-  duration: number; styles: string | string[];
-  companion: string; budget: number; food?: string[];
-}) {
-  const db = getDb();
-  const allPlaces = db.prepare("SELECT * FROM places WHERE lat IS NOT NULL AND lng IS NOT NULL AND lat != 'NaN' AND lng != 'NaN' AND lat > 15 AND lat < 17").all() as any[];
-  
-  allPlaces.forEach(p => {
-    p.base_score = (p.popularity * 50) + (p.rating * 10);
-    const stylesArr = Array.isArray(styles) ? styles : [styles].filter(Boolean);
-    if (stylesArr.includes(p.category)) p.base_score += 30;
-    p.avg_visit_min = Number(p.avg_visit_min) || 60;
+function gtheme(acts:any[],di:number){
+  const cats=Array.from(new Set(acts.filter(a=>!FC.has(a.type)&&a.type!=='cafe'&&a.type!=='rest').map(a=>a.type))).sort().join('+');
+  const M:Record<string,[string,string]>={
+    'heritage':['Tinh hoa Cố đô','Mặc áo dài truyền thống để chụp ảnh miễn phí tại Đại Nội.'],
+    'temple':['Chùa chiền xứ Huế','Di chuyển chậm, thưởng thức không gian thiền.'],
+    'heritage+temple':['Di sản Hoàng triều','Vé combo di tích tiết kiệm hơn mua lẻ.'],
+    'nature':['Thiên nhiên Huế','Kem chống nắng + mũ rộng vành là bắt buộc.'],
+    'craft_village':['Nghệ nhân Huế','Mua quà thủ công trực tiếp từ nghệ nhân, giá tốt hơn chợ.'],
+    'experience':['Trải nghiệm Huế','Đặt trước qua điện thoại để đảm bảo chỗ.'],
+  };
+  const fb=['Nhịp sống Huế mộng mơ','Dạo bước kinh thành','Hoài niệm xứ Huế','Sống chậm như người Huế','Huế — Góc nhìn mới'];
+  const m=M[cats];return{theme:m?.[0]||fb[di%fb.length],tip:m?.[1]||`Ngày ${di+1}: Tận hưởng từng phút ở Huế.`};
+}
+
+type Nd={lat:number;lng:number;vis:Set<string>;path:any[];g:number;sc:number;hc:number;meals:{b:boolean;l:boolean;d:boolean};lc:string};
+function sc(p:any,n:Nd,arr:number,tt:number):number{
+  const sl=slot(arr);if(!sl)return-9999;
+  let s=p.base_score;
+  if(sl.pref.includes(p.category))s+=400;else s-=200;
+  if(HC.has(p.category)&&n.hc>=MAX_H)s-=3000;
+  if(sl.req==='food'&&FC.has(p.category)){
+    if((sl.name==='BREAKFAST'&&!n.meals.b)||(sl.name==='LUNCH'&&!n.meals.l)||(sl.name==='DINNER'&&!n.meals.d))s+=800;
+  }
+  if(sl.req==='cafe'&&p.category==='cafe')s+=600;
+  if(FC.has(p.category)&&sl.req==='food'&&p.meal_type&&p.meal_type!=='any'){
+    if(sl.name==='BREAKFAST'&&p.meal_type!=='breakfast')s-=300;
+    if((sl.name==='LUNCH'||sl.name==='DINNER')&&p.meal_type==='breakfast')s-=300;
+  }
+  if(sl.name==='SIESTA'&&HV.has(p.category)&&!p.indoor)s-=1000;
+  if(n.lc===p.category&&!FC.has(p.category))s-=500;
+  if(HC.has(p.category)&&HC.has(n.lc))s-=800;
+  if(tt>40)s-=400;if(tt>60)s-=800;
+  s+=(p.popularity||0.5)*100+(p.rating||4)*20;
+  return s;
+}
+
+export function generateAstarTrip({duration,styles,companion,budget,food,startLat,startLng}:{
+  duration:number;styles:string|string[];companion:string;budget:number;food?:string[];startLat?:number;startLng?:number;
+}){
+  const db=getDb();
+  const allP=db.prepare("SELECT *,meal_type FROM places WHERE lat IS NOT NULL AND lng IS NOT NULL AND CAST(lat AS REAL)>15 AND CAST(lat AS REAL)<17").all() as any[];
+  const sArr=Array.isArray(styles)?styles:[styles].filter(Boolean);
+  allP.forEach(p=>{
+    p.base_score=(p.popularity||0.5)*80+(p.rating||4)*15;
+    if(sArr.some(s=>s===p.category))p.base_score+=50;
+    p.avg_visit_min=Number(p.avg_visit_min)||60;
+    p.meal_type=p.meal_type||(FC.has(p.category)?'any':null);
+    p.indoor=Number(p.indoor)||0;
+    p.lat=Number(p.lat);p.lng=Number(p.lng);
   });
+  const dur=Number(duration)||2;
+  const days:any[]=[],hl:string[]=[],gv=new Set<string>();
+  let aLat=(startLat&&startLat>15&&startLat<17)?startLat:16.4637;
+  let aLng=(startLng&&startLng>106&&startLng<109)?startLng:107.5909;
 
-  const dur = Number(duration) || 2;
-  const days = [];
-  const highlights: string[] = [];
-  const globalVisitedIds = new Set<string>();
+  for(let d=0;d<dur;d++){
+    const pq=new PQ<Nd>((a,b)=>b.sc-a.sc);
+    pq.push({lat:aLat,lng:aLng,vis:new Set(gv),path:[],g:0,sc:0,hc:0,meals:{b:false,l:false,d:false},lc:''});
+    let best:any[]=[],bestSc=-Infinity,st=0;
 
-  // Điểm neo (Anchor) bắt đầu: Trung tâm Huế
-  let currentLat = 16.4637;
-  let currentLng = 107.5909;
+    while(!pq.empty&&st<MAX_ST){
+      const n=pq.pop()!;st++;
+      if(n.g>=BUDGET-30||n.path.length>=9){if(n.sc>bestSc){bestSc=n.sc;best=n.path;}continue;}
+      if(n.path.length>=4&&n.sc>bestSc){bestSc=n.sc;best=n.path;}
+      const cands=allP.filter(p=>!n.vis.has(p.id)&&dkm(n.lat,n.lng,p.lat,p.lng)<15);
+      const scored=cands.map(p=>{
+        const k=dkm(n.lat,n.lng,p.lat,p.lng),tt=tm(k),arr=n.g+tt;
+        return{p,tt,arr,s:sc(p,n,arr,tt)};
+      }).sort((a,b)=>b.s-a.s).slice(0,6);
 
-  const TIME_BUDGET = 360; // Quỹ thời gian mỗi ngày (6 tiếng di chuyển + tham quan)
-  const START_HOUR = 8; // Bắt đầu lúc 08:00 sáng
-
-  for (let d = 1; d <= dur; d++) {
-    const pq = new PriorityQueue<AStarNode>((a, b) => a.f_cost - b.f_cost);
-    
-    pq.push({
-      currentLat,
-      currentLng,
-      visitedIds: new Set(globalVisitedIds),
-      path: [],
-      g_cost: 0,
-      h_cost: 0,
-      f_cost: 0
-    });
-
-    let bestDayPath: any[] = [];
-    let stateVisited = 0;
-
-    while (!pq.isEmpty()) {
-      const node = pq.pop()!;
-      stateVisited++;
-
-      // GOAL: Nếu đã dùng hết khoảng 85% - 100% quỹ thời gian
-      if (node.g_cost >= TIME_BUDGET * 0.85) {
-        bestDayPath = node.path;
-        break; // Tới đích
-      }
-
-      // Giới hạn tìm kiếm tránh bùng nổ tổ hợp (Pruning safety)
-      if (stateVisited > 1000) {
-        bestDayPath = node.path;
-        break;
-      }
-
-      const candidates = allPlaces.filter(p => !node.visitedIds.has(p.id));
-      
-      // Dynamic Category Flow (Bẻ lái Heuristic tự động)
-      candidates.forEach(p => {
-        let dynamicBonus = 0;
-        
-        // Từ phút 180 đến 270 (tương đương 11:00 - 12:30), ưu tiên Food
-        if (p.category === 'food' && node.g_cost >= 180 && node.g_cost <= 270) {
-          dynamicBonus += 800;
-        }
-        // Trước 180 phút hoặc sau 270 phút, ưu tiên Heritage/Nature
-        else if (['heritage', 'nature', 'architecture', 'temple'].includes(p.category) && (node.g_cost < 180 || node.g_cost > 270)) {
-          dynamicBonus += 300;
-        }
-        // Gần cuối ngày ưu tiên Cafe / Market
-        else if (['cafe', 'market'].includes(p.category) && node.g_cost >= 270) {
-          dynamicBonus += 250;
-        }
-        
-        // Food ngoài giờ ăn thì không nên đi
-        if (p.category === 'food' && (node.g_cost < 150 || node.g_cost > 300)) {
-          dynamicBonus -= 500; 
-        }
-
-        p.match_score = p.base_score + dynamicBonus;
-      });
-
-      // Chỉ lấy Top 8 điểm có match_score cao nhất để đẻ nhánh (Branching factor = 8)
-      candidates.sort((a, b) => b.match_score - a.match_score);
-      const topCandidates = candidates.slice(0, 8);
-
-      for (const place of topCandidates) {
-        const distKm = distance(node.currentLat, node.currentLng, place.lat, place.lng);
-        const tTravel = travelTime(distKm);
-        const tVisit = place.avg_visit_min;
-        
-        // Tính g(n): Tổng chi phí thời gian từ gốc
-        const newG = node.g_cost + tTravel + tVisit;
-
-        // Pruning: Nếu vượt quá ngân sách quá nhiều (cho phép lố 30 phút)
-        if (newG > TIME_BUDGET + 30) {
-          continue; 
-        }
-
-        // Penalty nếu điểm này quá xa
-        const penalty = tTravel > 120 ? 10000 : 0; 
-
-        // Tính h(n): Heuristic
-        const estRemainingTime = Math.max(0, TIME_BUDGET - newG);
-        const heuristicBonus = place.match_score * 0.5; // Thưởng điểm
-        const newH = estRemainingTime - heuristicBonus;
-
-        const newF = newG + newH + penalty;
-
-        const newVisited = new Set(node.visitedIds);
-        newVisited.add(place.id);
-        
-        const activity = {
-          time: formatTime(START_HOUR, node.g_cost + tTravel),
-          name: place.name,
-          type: place.category,
-          duration: `${tVisit} phút`,
-          cost: place.price,
-          description: place.description || 'Trải nghiệm văn hóa Cố đô',
-          ai_tip: `Phù hợp với phong cách của bạn (điểm phù hợp: ${place.match_score})`,
-          location: place.address,
-          lat: place.lat,
-          lng: place.lng,
-          place_id: place.id,
-        };
-
-        pq.push({
-          currentLat: place.lat,
-          currentLng: place.lng,
-          visitedIds: newVisited,
-          path: [...node.path, activity],
-          g_cost: newG,
-          h_cost: newH,
-          f_cost: newF
-        });
+      for(const{p:pl,tt,arr,s}of scored){
+        const leave=arr+pl.avg_visit_min;
+        if(leave>BUDGET+20||s<-1000)continue;
+        const sl=slot(arr);const sn:SN=sl?.name||'EVENING';
+        const nv=new Set(n.vis);nv.add(pl.id);
+        const nm={...n.meals};
+        if(FC.has(pl.category)){if(sn==='BREAKFAST')nm.b=true;if(sn==='LUNCH')nm.l=true;if(sn==='DINNER')nm.d=true;}
+        const dur_s=pl.avg_visit_min>=60?`${Math.round(pl.avg_visit_min/60*10)/10} giờ`:`${pl.avg_visit_min} phút`;
+        pq.push({lat:pl.lat,lng:pl.lng,vis:nv,path:[...n.path,{
+          time:ft(arr),name:pl.name,type:pl.category,duration:dur_s,
+          cost:pl.price||'Miễn phí',description:pl.description||'',
+          ai_tip:gtip(pl.category,sn),location:pl.address||'TP. Huế',
+          lat:pl.lat,lng:pl.lng,place_id:pl.id,
+        }],g:leave,sc:n.sc+s,hc:n.hc+(HC.has(pl.category)?1:0),meals:nm,lc:pl.category});
       }
     }
 
-    // Cập nhật state chung
-    const dayActivities = bestDayPath || [];
-    if (dayActivities.length > 0) {
-      const lastPlace = allPlaces.find(p => p.name === dayActivities[dayActivities.length - 1].name);
-      if (lastPlace) {
-        currentLat = lastPlace.lat;
-        currentLng = lastPlace.lng;
-      }
-      
-      dayActivities.forEach(act => {
-        const p = allPlaces.find(x => x.name === act.name);
-        if (p) {
-          globalVisitedIds.add(p.id);
-          if (!highlights.includes(p.name) && ['heritage', 'nature'].includes(p.category)) {
-            highlights.push(p.name);
-          }
+    // Post-process: inject siesta rest
+    const fa:any[]=[];let si=false;
+    for(let i=0;i<best.length;i++){
+      fa.push(best[i]);
+      if(!si&&i<best.length-1){
+        const ce=ptm(best[i].time)+pvd(best[i].duration);
+        const ns=ptm(best[i+1].time);
+        if(ce>=300&&ce<=450&&(ns-ce)>=40){
+          fa.push({time:ft(ce),name:'Nghỉ trưa — thư giãn',type:'rest',duration:'60 phút',cost:'Miễn phí',
+            description:'Nghỉ ngơi tránh nắng. Về khách sạn hoặc quán có máy lạnh.',
+            ai_tip:'Ngủ trưa 30 phút — chiều tràn năng lượng khám phá tiếp.',location:'Khách sạn / quán cafe'});
+          si=true;
         }
-      });
+      }
     }
-
-    days.push({
-      day: d,
-      theme: d === 1 ? 'Khám phá văn hóa nổi bật' : `Ngày ${d}: Nhịp sống Cố đô`,
-      day_tip: d === 1 ? 'Bắt đầu từ trung tâm, di chuyển theo vòng tròn để tiết kiệm thời gian.' : `Ngày ${d}: Khám phá thêm những góc nhỏ của Huế.`,
-      activities: dayActivities
-    });
+    for(const a of best){if(a.place_id)gv.add(a.place_id);if(HC.has(a.type)&&!hl.includes(a.name))hl.push(a.name);}
+    if(best.length>0){const l=best[best.length-1];aLat=l.lat;aLng=l.lng;}
+    const t=gtheme(fa,d);
+    days.push({day:d+1,theme:t.theme,day_tip:t.tip,activities:fa});
   }
 
-  const costEstimate = budget ? `${Number(budget).toLocaleString('vi-VN')} VNĐ` : 'Dự kiến 2,000,000 VNĐ';
-
-  const COMPANION_LABELS: Record<string, string> = {
-    solo: 'một mình', couple: 'cặp đôi', family: 'gia đình', friends: 'nhóm bạn',
-  };
-  const compLabel = COMPANION_LABELS[companion] || companion;
-  const titleThemes = [
-    `${dur} ngày khám phá Cố đô Huế`,
-    `Hành trình ${dur} ngày tại Huế`,
-    `Huế ${dur} ngày — Lịch trình cá nhân`,
-  ];
-  const titleStr = titleThemes[Math.floor(Math.random() * titleThemes.length)];
-
-  return {
-    title: titleStr,
-    summary: `Hành trình ${dur} ngày dành cho ${compLabel} — được AI lên kế hoạch tối ưu dựa trên sở thích và quỹ thời gian của bạn.`,
-    total_cost_estimate: costEstimate,
-    highlights: highlights.slice(0, 4),
-    ai_insight: '✨ AI cân bằng thời gian di chuyển, nghỉ ngơi và tham quan để bạn không bị kiệt sức.',
+  const CL:Record<string,string>={solo:'một mình',couple:'cặp đôi',family:'gia đình',friends:'nhóm bạn'};
+  return{
+    title:`Huế ${dur} ngày — Như có hướng dẫn viên riêng`,
+    summary:`Lịch trình ${dur} ngày cho ${CL[companion]||companion} — nhịp ngày thực tế: ăn sáng → di tích → nghỉ trưa → khám phá chiều → ẩm thực tối. Tối đa ${MAX_H} di tích/ngày.`,
+    total_cost_estimate:budget?`${Number(budget).toLocaleString('vi-VN')} VNĐ`:'Dự kiến 2.000.000 VNĐ',
+    highlights:hl.slice(0,5),
+    ai_insight:'🎯 Lịch trình theo cách HDV chuyên nghiệp: sáng ăn đặc sản, tham quan khi mát, nghỉ trưa tránh nắng, chiều muộn dạo chơi nhẹ nhàng.',
     days,
   };
 }
+
+function ptm(t:string){const[h,m]=t.split(':').map(Number);return(h-START_H)*60+m;}
+function pvd(d:string){return d.includes('giờ')?Math.round(parseFloat(d)*60):parseInt(d)||60;}
+

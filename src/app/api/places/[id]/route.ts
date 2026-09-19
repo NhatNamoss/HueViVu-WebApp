@@ -28,6 +28,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const lng = data.lng ? parseFloat(data.lng) : 107.5909;
     const img = data.img || '/assets/citadel.png';
     const ai_insight = data.ai_insight || '';
+    const rating = data.rating != null ? parseFloat(data.rating) : 4.5;
+    const popularity = data.popularity != null ? parseFloat(data.popularity) : 0.5;
+    const avg_visit_min = data.avg_visit_min != null ? parseInt(data.avg_visit_min) : 90;
+    const meal_type = data.meal_type || null;
     
     // Convert arrays to JSON strings
     const highlights = JSON.stringify(data.highlights || []);
@@ -52,6 +56,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const stmt = db.prepare(`
       UPDATE places SET 
         name = ?, category = ?, description = ?, address = ?, price = ?, lat = ?, lng = ?, img = ?, ai_insight = ?,
+        rating = ?, popularity = ?, avg_visit_min = ?, meal_type = ?,
         highlights = ?, tips = ?, tags = ?, vibe = ?, taste_profile = ?, accessibility = ?, best_time_of_day = ?, specialties = ?,
         crowd_level = ?, physical_level = ?, best_time = ?, authenticity = ?, walking_distance = ?, ideal_pacing = ?, noise_level = ?, dining_style = ?, weather_dependent = ?
       WHERE id = ?
@@ -59,6 +64,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
     stmt.run(
       name, category, description, address, price, lat, lng, img, ai_insight,
+      rating, popularity, avg_visit_min, meal_type,
       highlights, tips, tags, vibe, taste_profile, accessibility, best_time_of_day, specialties,
       crowd_level, physical_level, best_time, authenticity, walking_distance, ideal_pacing, noise_level, dining_style, weather_dependent,
       params.id

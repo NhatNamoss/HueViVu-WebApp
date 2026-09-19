@@ -4,12 +4,25 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 const CATEGORIES = [
-  'Heritage (Di sản)',
-  'Local Vibe (Nhịp sống địa phương)',
-  'Nature (Thiên nhiên)',
-  'Culinary (Ẩm thực)',
-  'Cafe & Chill',
-  'Art & Culture (Văn hóa nghệ thuật)'
+  { value: 'heritage', label: '🏛️ Di tích' },
+  { value: 'temple', label: '🛕 Chùa chiền' },
+  { value: 'food', label: '🍜 Ẩm thực' },
+  { value: 'cafe', label: '☕ Cà phê' },
+  { value: 'nature', label: '🌿 Thiên nhiên' },
+  { value: 'market', label: '🛍️ Chợ' },
+  { value: 'craft_village', label: '🏘️ Làng nghề' },
+  { value: 'art', label: '🎨 Nghệ thuật' },
+  { value: 'architecture', label: '🏗️ Kiến trúc' },
+  { value: 'experience', label: '🎭 Trải nghiệm' },
+];
+
+const MEAL_TYPES = [
+  { value: '', label: '— Không áp dụng —' },
+  { value: 'breakfast', label: '🌅 Ăn sáng' },
+  { value: 'lunch', label: '☀️ Ăn trưa' },
+  { value: 'dinner', label: '🌙 Ăn tối' },
+  { value: 'snack', label: '🧁 Ăn vặt' },
+  { value: 'any', label: '🕐 Bất kỳ' },
 ];
 
 const VIBE_OPTIONS = [
@@ -38,7 +51,7 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
 
   const [formData, setFormData] = useState({
     name: '',
-    category: CATEGORIES[0],
+    category: 'heritage',
     description: '',
     address: '',
     price: 'Miễn phí',
@@ -46,6 +59,10 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
     lat: '16.4637',
     lng: '107.5909',
     ai_insight: '',
+    rating: '4.5',
+    popularity: '0.5',
+    avg_visit_min: '90',
+    meal_type: '',
     crowd_level: 'Trung bình',
     physical_level: 'Nhẹ nhàng (Dễ)',
     best_time: 'Cả ngày',
@@ -67,14 +84,19 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
   useEffect(() => {
     if (initialData) {
       setFormData({
+        ...formData,
         ...initialData,
+        rating: String(initialData.rating ?? '4.5'),
+        popularity: String(initialData.popularity ?? '0.5'),
+        avg_visit_min: String(initialData.avg_visit_min ?? '90'),
+        meal_type: initialData.meal_type || '',
         vibe: Array.isArray(initialData.vibe) ? initialData.vibe : [],
         taste_profile: Array.isArray(initialData.taste_profile) ? initialData.taste_profile : [],
         accessibility: Array.isArray(initialData.accessibility) ? initialData.accessibility : [],
         best_time_of_day: Array.isArray(initialData.best_time_of_day) ? initialData.best_time_of_day : [],
-        highlights: Array.isArray(initialData.highlights) ? initialData.highlights.join(', ') : '',
-        tips: Array.isArray(initialData.tips) ? initialData.tips.join(', ') : '',
-        specialties: Array.isArray(initialData.specialties) ? initialData.specialties.join(', ') : '',
+        highlights: Array.isArray(initialData.highlights) ? initialData.highlights.join(', ') : (initialData.highlights || ''),
+        tips: Array.isArray(initialData.tips) ? initialData.tips.join(', ') : (initialData.tips || ''),
+        specialties: Array.isArray(initialData.specialties) ? initialData.specialties.join(', ') : (initialData.specialties || ''),
         weather_dependent: initialData.weather_dependent === '1' || initialData.weather_dependent === true
       });
     }
@@ -135,6 +157,10 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
 
     const payload = {
       ...formData,
+      rating: parseFloat(formData.rating) || 4.5,
+      popularity: parseFloat(formData.popularity) || 0.5,
+      avg_visit_min: parseInt(formData.avg_visit_min) || 90,
+      meal_type: formData.meal_type || null,
       highlights: formData.highlights.split(',').map(s => s.trim()).filter(Boolean),
       tips: formData.tips.split(',').map(s => s.trim()).filter(Boolean),
       specialties: formData.specialties.split(',').map(s => s.trim()).filter(Boolean)
@@ -176,7 +202,7 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700">Danh mục *</label>
             <select name="category" value={formData.category} onChange={handleChange} className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-orange-500/50 outline-none bg-white">
-              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
             </select>
           </div>
         </div>
@@ -232,6 +258,46 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700">Kinh độ (Longitude)</label>
             <input type="text" name="lng" value={formData.lng} onChange={handleChange} className="w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-orange-500/50 outline-none bg-gray-50 font-mono" />
+          </div>
+        </div>
+      </div>
+
+      {/* ══ Tour Quality — ảnh hưởng trực tiếp A* algorithm ══ */}
+      <div className="bg-white p-6 rounded-xl border-2 border-orange-200 shadow-sm space-y-6">
+        <h2 className="text-lg font-semibold text-gray-800 border-b pb-2 flex items-center gap-2">
+          ⭐ Chất lượng Tour
+          <span className="text-xs font-normal text-orange-600 bg-orange-50 px-2 py-1 rounded">A* algorithm</span>
+        </h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">⭐ Rating (1-5)</label>
+            <input type="number" name="rating" value={formData.rating} onChange={handleChange}
+              min="1" max="5" step="0.1"
+              className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-orange-300" />
+            <p className="text-xs text-gray-400">Đánh giá tổng thể</p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">🔥 Popularity (0-1)</label>
+            <input type="number" name="popularity" value={formData.popularity} onChange={handleChange}
+              min="0" max="1" step="0.05"
+              className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-orange-300" />
+            <p className="text-xs text-gray-400">1.0 = Đại Nội, 0.5 = trung bình</p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">⏱️ Thời gian (phút)</label>
+            <input type="number" name="avg_visit_min" value={formData.avg_visit_min} onChange={handleChange}
+              min="15" max="300" step="15"
+              className="w-full p-2.5 border rounded-lg outline-none focus:ring-2 focus:ring-orange-300" />
+            <p className="text-xs text-gray-400">45=ăn, 90=tham quan, 120=lăng</p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">🍽️ Loại bữa ăn</label>
+            <select name="meal_type" value={formData.meal_type} onChange={handleChange}
+              className="w-full p-2.5 border rounded-lg bg-white outline-none focus:ring-2 focus:ring-orange-300">
+              {MEAL_TYPES.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+            <p className="text-xs text-gray-400">Chỉ cần cho quán ăn/food</p>
           </div>
         </div>
       </div>

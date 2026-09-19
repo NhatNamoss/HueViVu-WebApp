@@ -26,6 +26,13 @@ const createMarker = (emoji: string, index: number) => new L.DivIcon({
   iconAnchor: [18, 18],
 });
 
+const USER_ICON = new L.DivIcon({
+  html: `<div style="width:18px;height:18px;border-radius:50%;background:#3B82F6;border:3px solid white;box-shadow:0 0 0 6px rgba(59,130,246,0.25),0 2px 8px rgba(0,0,0,0.3);"></div>`,
+  className: '',
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+});
+
 function MapBounds({ coords }: { coords: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
@@ -37,7 +44,7 @@ function MapBounds({ coords }: { coords: [number, number][] }) {
 // Hue center fallback
 const HUE_CENTER: [number, number] = [16.4637, 107.5909];
 
-export default function CinematicMapInner({ activities, activeIndex }: { activities: any[]; activeIndex?: number }) {
+export default function CinematicMapInner({ activities, activeIndex, userLocation }: { activities: any[]; activeIndex?: number; userLocation?: { lat: number; lng: number } | null }) {
   const [route, setRoute] = useState<[number, number][]>([]);
 
   // Stable coords: computed once per activities identity — no jitter on re-render
@@ -101,6 +108,11 @@ export default function CinematicMapInner({ activities, activeIndex }: { activit
             </Popup>
           </Marker>
         ))}
+        {userLocation && (
+          <Marker position={[userLocation.lat, userLocation.lng]} icon={USER_ICON} zIndexOffset={2000}>
+            <Popup><p style={{ margin: 0, fontWeight: 700, fontSize: 12 }}>📍 Vị trí của bạn</p></Popup>
+          </Marker>
+        )}
       </MapContainer>
     </div>
   );

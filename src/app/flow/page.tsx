@@ -89,7 +89,18 @@ export default function FlowPage() {
   const [done, setDone] = useState(false);
   const [tripId, setTripId] = useState('');
   const [freeInput, setFreeInput] = useState('');
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Lấy vị trí user khi mở trang
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => {} // fallback: server dùng trung tâm Huế
+      );
+    }
+  }, []);
 
   useEffect(() => {
     setChat([{ from: 'ai', text: 'Xin chào! Tôi sẽ giúp bạn tạo một hành trình Huế hoàn toàn riêng. ' + STEP_QUESTIONS[0].q }]);
@@ -140,6 +151,8 @@ export default function FlowPage() {
           budget: state.budget === 'budget' ? 300 : state.budget === 'moderate' ? 600 : state.budget === 'comfort' ? 1000 : 2000,
           food: [],
           notes: freeInput,
+          startLat: userLocation?.lat,
+          startLng: userLocation?.lng,
         }),
       });
       const data = await res.json();

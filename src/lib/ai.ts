@@ -238,15 +238,22 @@ export async function generateTrip({ duration, styles, companion, budget, food, 
     return `NGÀY ${i + 1} — Khu vực: ${areaName}\nĐiểm tham quan (GOM SẴN theo địa lý — KHÔNG tách sang ngày khác):\n${sights || '  (chưa có)'}\nĂn uống gần khu vực:\n${nearFoods || '  (chưa có)'}\nCafe gần khu vực:\n${nearCafes || '  (chưa có)'}`;
   }).join('\n\n');
 
-  const prompt = `Bạn là HueViVu AI, chuyên gia du lịch Huế.
+  const prompt = `Bạn là HueViVu AI, chuyên gia du lịch Huế — thay thế hướng dẫn viên chuyên nghiệp.
 Thông tin: ${dur} ngày | Phong cách: ${styleStr} | Đi cùng: ${companion} | Ngân sách: ${Number(budget).toLocaleString('vi-VN')} VNĐ | Ẩm thực: ${foodStr}${personalizationSection}
+
+⚠️ QUY TẮC BẮT BUỘC — như hướng dẫn viên Huế thực tế:
+1. NHỊP NGÀY: 07:00 ăn sáng → 08:00-10:30 di tích/tham quan → 10:30 cafe nghỉ chân → 11:30 ăn trưa → 12:30-14:00 NGHỈ TRƯA (Huế rất nóng) → 14:00-16:30 tham quan tiếp → 16:30-18:00 dạo chơi nhẹ → 18:00 ăn tối → 19:00-21:00 hoạt động tối
+2. TỐI ĐA 2 di tích (heritage/temple) mỗi ngày — 1 sáng + 1 chiều. KHÔNG nhồi nhét.
+3. XEN KẼ nặng-nhẹ: sau di tích phải có cafe/ăn uống/dạo chơi, KHÔNG 2 di tích liên tiếp.
+4. BẮT BUỘC 3 bữa ăn: sáng (07:00), trưa (11:30), tối (18:00).
+5. ai_tip phải là MẸO THỰC TẾ (giá vé combo, giờ đẹp chụp ảnh, gọi món gì...), KHÔNG generic.
 
 Địa điểm ĐÃ được gom theo khu vực địa lý. Bạn PHẢI dùng đúng danh sách từng ngày, KHÔNG hoán đổi, KHÔNG bịa thêm:
 
 ${clusterContext}
 
-Sắp xếp thứ tự hợp lý (sáng → trưa → chiều → tối), đặt theme, viết mô tả và mẹo thực tế.
-Trả về JSON (không markdown): {"title":"...","summary":"...","total_cost_estimate":"...","highlights":["..."],"ai_insight":"...","days":[{"day":1,"theme":"...","day_tip":"...","activities":[{"time":"07:30","name":"...","type":"heritage","duration":"2 giờ","cost":"...","description":"...","ai_tip":"...","location":"..."}]}]}`;
+Sắp xếp theo nhịp ngày ở trên, đặt theme, viết mô tả và mẹo thực tế.
+Trả về JSON (không markdown): {"title":"...","summary":"...","total_cost_estimate":"...","highlights":["..."],"ai_insight":"...","days":[{"day":1,"theme":"...","day_tip":"...","activities":[{"time":"07:00","name":"...","type":"food","duration":"45 phút","cost":"...","description":"...","ai_tip":"...","location":"..."}]}]}`;
 
   try {
     const text = (await callMessages({ max_tokens: 8192, messages: [{ role: 'user', content: prompt }] })).trim();

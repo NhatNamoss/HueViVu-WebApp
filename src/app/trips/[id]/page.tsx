@@ -43,6 +43,15 @@ const PACKING = [
 const TIMES = ['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00'];
 type ChatMsg = { role: 'user' | 'assistant'; content: string };
 
+// Haversine distance (km)
+function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 function renderAiMarkdown(text: string) {
   const lines = text.split('\n');
   const out: React.ReactNode[] = [];
@@ -124,6 +133,11 @@ export default function TripDetailPage() {
   const [editActIdx, setEditActIdx] = useState<number | null>(null);
   const [editAct, setEditAct] = useState<Partial<Activity>>({});
   const [saving, setSaving] = useState(false);
+  // Realtime tracking
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [tourToast, setTourToast] = useState<string | null>(null);
+  const lastNotifiedRef = useRef<string>('');
+  const weatherIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // place search
   const [placeSearchOpen, setPlaceSearchOpen] = useState(false);
   const [placeQuery, setPlaceQuery] = useState('');
@@ -153,6 +167,103 @@ export default function TripDetailPage() {
   }, [params.id]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
+
+  // ── Realtime GPS tracking ──
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  // ── Tour notifications: schedule + geofence ──
+  useEffect(() => {
+    if (!trip) return;
+    const activities = trip.itinerary?.days?.[activeDay]?.activities || [];
+    if (activities.length === 0) return;
+
+    const checkTour = () => {
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+
+      for (const act of activities) {
+        const [h, m] = (act.time || '').split(':').map(Number);
+        if (isNaN(h)) continue;
+        const actMin = h * 60 + (m || 0);
+        const diff = actMin - nowMin;
+        const key = `schedule-${act.name}-${act.time}`;
+
+        // 15 phút trước hoạt động
+        if (diff > 0 && diff <= 15 && lastNotifiedRef.current !== key) {
+          lastNotifiedRef.current = key;
+          setTourToast(`⏰ ${diff} phút nữa: ${act.name}`);
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('HueViVu', { body: `⏰ ${diff} phút nữa: ${act.name}`, icon: '/icon-192x192.png' });
+          }
+        }
+
+        // Trễ lịch > 15 phút
+        if (diff < -15 && diff > -60 && lastNotifiedRef.current !== `late-${key}`) {
+          lastNotifiedRef.current = `late-${key}`;
+          setTourToast(`⚠️ Trễ ${Math.abs(diff)} phút: ${act.name} — cân nhắc bỏ qua?`);
+        }
+
+        // Geofence: đến gần điểm (< 200m)
+        if (userLocation && act.lat && act.lng) {
+          const d = haversine(userLocation.lat, userLocation.lng, act.lat, act.lng);
+          const geoKey = `arrived-${act.name}`;
+          if (d < 0.2 && lastNotifiedRef.current !== geoKey) {
+            lastNotifiedRef.current = geoKey;
+            setTourToast(`📍 Bạn đã đến ${act.name}!`);
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification('HueViVu', { body: `📍 Bạn đã đến ${act.name}!`, icon: '/icon-192x192.png' });
+            }
+          }
+        }
+      }
+    };
+
+    checkTour();
+    const interval = setInterval(checkTour, 30_000); // Check mỗi 30s
+    return () => clearInterval(interval);
+  }, [trip, activeDay, userLocation]);
+
+  // ── Weather polling mỗi 30 phút + notification khi thay đổi ──
+  useEffect(() => {
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
+    const prevWeatherRef = { key: '' };
+    const pollWeather = () => {
+      fetch('/api/weather').then(r => r.json()).then(d => {
+        if (!d.temp) return;
+        const newWeather: Weather = {
+          emoji: d.condition_emoji || '🌤️', temp: d.temp,
+          vi: d.condition_vi || '', advisory: d.advisory || '',
+          advisory_type: d.advisory_type || 'good', forecast: d.forecast,
+        };
+        const newKey = `${d.condition}|${d.temp}`;
+        if (prevWeatherRef.key && prevWeatherRef.key !== newKey) {
+          // Thời tiết thay đổi → toast + push
+          setWeatherDismissed(false);
+          setTourToast(`🌤️ Thời tiết thay đổi: ${d.temp}°C — ${d.condition_vi}`);
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('HueViVu — Thời tiết', { body: d.advisory || `${d.temp}°C — ${d.condition_vi}`, icon: '/icon-192x192.png' });
+          }
+        }
+        prevWeatherRef.key = newKey;
+        setWeather(newWeather);
+      }).catch(() => {});
+    };
+
+    weatherIntervalRef.current = setInterval(pollWeather, 30 * 60_000); // 30 phút
+    return () => { if (weatherIntervalRef.current) clearInterval(weatherIntervalRef.current); };
+  }, []);
 
   const persistRaw = useCallback(async (newTrip: Trip) => {
     setSaving(true);
@@ -384,6 +495,38 @@ export default function TripDetailPage() {
       {/* Weather banner */}
       {weather && !weatherDismissed && <WeatherBanner weather={weather} onDismiss={() => setWeatherDismissed(true)} />}
 
+      {/* Tour toast notification */}
+      {tourToast && (
+        <div style={{ margin: '0 20px 12px', padding: '12px 14px', background: 'linear-gradient(135deg,rgba(59,130,246,0.08),rgba(59,130,246,0.03))', borderRadius: 'var(--radius-md)', border: '1px solid rgba(59,130,246,0.2)', display: 'flex', gap: 10, alignItems: 'center', animation: 'fadeIn 0.3s ease' }}>
+          <span style={{ flex: 1, fontSize: '0.8125rem', fontWeight: 600, color: 'var(--navy)', lineHeight: 1.4 }}>{tourToast}</span>
+          <button onClick={() => setTourToast(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--navy-muted)', padding: 0, flexShrink: 0 }}>×</button>
+        </div>
+      )}
+
+      {/* Realtime distance to next activity */}
+      {userLocation && (() => {
+        const acts = trip.itinerary?.days?.[activeDay]?.activities || [];
+        const now = new Date();
+        const nowMin = now.getHours() * 60 + now.getMinutes();
+        const next = acts.find(a => {
+          const [h, m] = (a.time || '').split(':').map(Number);
+          return !isNaN(h) && (h * 60 + (m || 0)) >= nowMin && a.lat && a.lng;
+        });
+        if (!next || !next.lat || !next.lng) return null;
+        const dist = haversine(userLocation.lat, userLocation.lng, next.lat, next.lng);
+        return (
+          <div style={{ margin: '0 20px 12px', padding: '10px 14px', background: 'rgba(59,130,246,0.06)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(59,130,246,0.12)', display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>🧭</span>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--navy)', margin: '0 0 2px' }}>
+                {dist < 1 ? `${Math.round(dist * 1000)}m` : `${dist.toFixed(1)}km`} → {next.name}
+              </p>
+              <p style={{ fontSize: '0.72rem', color: 'var(--navy-muted)', margin: 0 }}>{next.time} · {next.duration}</p>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Summary */}
       <div style={{ margin: '0 20px 16px', padding: '16px', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', borderRadius: 'var(--radius-lg)', color: 'white' }}>
         <p style={{ fontSize: '0.8rem', opacity: 0.88, margin: '0 0 8px', lineHeight: 1.5 }}>{trip.summary}</p>
@@ -432,7 +575,7 @@ export default function TripDetailPage() {
 
       {viewMode === 'map' && (
         <div style={{ margin: '0 20px 16px', borderRadius: 'var(--radius-lg)', overflow: 'hidden', height: 380, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}>
-          <CinematicMap activities={allActivities} activeIndex={activeActivity ?? undefined} />
+          <CinematicMap activities={allActivities} activeIndex={activeActivity ?? undefined} userLocation={userLocation} />
         </div>
       )}
       {viewMode === 'timeline' && currentDay && (

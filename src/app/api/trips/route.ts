@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { duration, styles, companion, budget, food, sessionId } = body;
+    const { duration, styles, companion, budget, food, sessionId, startLat, startLng } = body;
 
     if (!duration || !styles || !companion || !budget) {
       return Response.json({ error: 'Thiếu thông tin để tạo lịch trình' }, { status: 400 });
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const itinerary = generateAstarTrip({ duration, styles, companion, budget, food: food || [] });
+    const itinerary = generateAstarTrip({ duration, styles, companion, budget, food: food || [], startLat, startLng });
 
     const tripId = 'trip_' + uuidv4().replace(/-/g, '').slice(0, 12);
     db.prepare(`INSERT INTO trips

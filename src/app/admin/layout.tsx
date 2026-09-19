@@ -15,6 +15,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <Link href="/admin/data-collector" className="text-sm font-medium text-gray-700 hover:text-orange-500 transition-colors">
               📍 Places
             </Link>
+            <Link href="/admin/tours" className="text-sm font-medium text-gray-700 hover:text-orange-500 transition-colors">
+              🎫 Tours
+            </Link>
             <Link href="/admin/ai-trainer" className="text-sm font-medium text-gray-700 hover:text-orange-500 transition-colors">
               🤖 AI Trainer
             </Link>

@@ -233,6 +233,9 @@ export default function FlowPage() {
               <button onClick={handleGenerate} disabled={state.tags.length === 0} className="btn-primary btn-ripple" style={{ width: '100%', opacity: state.tags.length === 0 ? 0.5 : 1 }}>
                 ✨ Tạo hành trình của tôi
               </button>
+              <button onClick={() => router.push('/tours-combo')} style={{ width: '100%', padding: '12px', background: 'none', border: '1.5px solid rgba(255,127,107,0.3)', borderRadius: 'var(--radius-md)', color: 'var(--coral)', fontWeight: 600, fontSize: '0.8125rem', cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                🎫 Hoặc xem Combo Tour có sẵn
+              </button>
             </div>
           )}
         </div>
@@ -247,10 +250,18 @@ export default function FlowPage() {
       )}
 
       {done && (
-        <div style={{ padding: '20px 20px 48px' }}>
+        <div style={{ padding: '20px 20px 48px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <button onClick={() => router.push(`/trips/${tripId}`)} className="btn-primary btn-ripple" style={{ width: '100%', fontSize: '1rem' }}>
             Xem lịch trình của bạn →
           </button>
+          <div style={{ background: 'linear-gradient(135deg, rgba(255,127,107,0.08), rgba(255,154,92,0.08))', borderRadius: 'var(--radius-lg)', padding: '16px', border: '1px solid rgba(255,127,107,0.15)' }}>
+            <p style={{ fontSize: '0.8125rem', color: 'var(--navy-muted)', marginBottom: 10, lineHeight: 1.5 }}>
+              🎫 <strong style={{ color: 'var(--navy)' }}>Không muốn tự lên kế hoạch?</strong> Xem combo tour có sẵn — do người Huế chọn lọc, chỉ cần chọn & đi.
+            </p>
+            <button onClick={() => router.push('/tours-combo')} style={{ background: 'none', border: 'none', color: 'var(--coral)', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', padding: 0, fontFamily: 'var(--font)' }}>
+              Xem Combo Tour →
+            </button>
+          </div>
         </div>
       )}
     </div>

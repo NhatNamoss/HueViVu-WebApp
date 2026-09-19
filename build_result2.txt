@@ -1,0 +1,70 @@
+﻿  Γû▓ Next.js 14.2.35
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ Γ£ô Compiled successfully
+   Skipping validation of types
+   Skipping linting
+   Collecting page data ...
+   Generating static pages (0/36) ...
+   Generating static pages (9/36) 
+   Generating static pages (18/36) 
+   Generating static pages (27/36) 
+ Γ£ô Generating static pages (36/36)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+Γöî Γùï /                                    5.18 kB         102 kB
+Γö£ Γùï /_not-found                          873 B          88.7 kB
+Γö£ Γùï /3d-demo                             326 kB          414 kB
+Γö£ Γùï /admin/ai-trainer                    1.67 kB        98.2 kB
+Γö£ Γùï /admin/ai-trainer/form               2.48 kB        90.3 kB
+Γö£ Γùï /admin/data-collector                1.74 kB        98.2 kB
+Γö£ Γùï /admin/data-collector/add            172 B          92.4 kB
+Γö£ ╞Æ /admin/data-collector/edit/[id]      812 B          93.1 kB
+Γö£ Γùï /admin/feedback                      684 B          88.5 kB
+Γö£ ╞Æ /api/auth/demo                       0 B                0 B
+Γö£ ╞Æ /api/auth/login                      0 B                0 B
+Γö£ ╞Æ /api/auth/me                         0 B                0 B
+Γö£ ╞Æ /api/auth/register                   0 B                0 B
+Γö£ ╞Æ /api/chat                            0 B                0 B
+Γö£ ╞Æ /api/events                          0 B                0 B
+Γö£ ╞Æ /api/feed                            0 B                0 B
+Γö£ ╞Æ /api/feed/[id]/like                  0 B                0 B
+Γö£ ╞Æ /api/feedback                        0 B                0 B
+Γö£ ╞Æ /api/journal                         0 B                0 B
+Γö£ ╞Æ /api/journal/[id]                    0 B                0 B
+Γö£ ╞Æ /api/places                          0 B                0 B
+Γö£ ╞Æ /api/places/[id]                     0 B                0 B
+Γö£ ╞Æ /api/training                        0 B                0 B
+Γö£ ╞Æ /api/training/[id]                   0 B                0 B
+Γö£ ╞Æ /api/trips                           0 B                0 B
+Γö£ ╞Æ /api/trips/[id]                      0 B                0 B
+Γö£ ╞Æ /api/trips/[id]/add-place            0 B                0 B
+Γö£ ╞Æ /api/trips/[id]/customize            0 B                0 B
+Γö£ ╞Æ /api/trips/[id]/save-itinerary       0 B                0 B
+Γö£ ╞Æ /api/tts                             0 B                0 B
+Γö£ ╞Æ /api/vision                          0 B                0 B
+Γö£ Γùï /api/weather                         0 B                0 B
+Γö£ Γùï /community                           2.37 kB        98.9 kB
+Γö£ Γùï /explore                             4.66 kB         101 kB
+Γö£ Γùï /flow                                4.33 kB        92.1 kB
+Γö£ Γùï /journal                             2.39 kB        98.9 kB
+Γö£ Γùï /live                                3.65 kB         100 kB
+Γö£ Γùï /onboarding                          2.42 kB        90.2 kB
+Γö£ ╞Æ /places/[id]                         4.67 kB         101 kB
+Γö£ Γùï /profile                             2.75 kB        99.2 kB
+Γö£ Γùï /profile/feedback                    3.23 kB        99.7 kB
+Γö£ Γùï /profile/privacy                     2.19 kB        98.7 kB
+Γö£ Γùï /trips                               2.59 kB        99.1 kB
+Γöö ╞Æ /trips/[id]                          12.1 kB         109 kB
++ First Load JS shared by all            87.8 kB
+  Γö£ chunks/117-f43344511b4b01eb.js       31.7 kB
+  Γö£ chunks/fd9d1056-5fd12b742601fe8c.js  53.6 kB
+  Γöö other shared chunks (total)          2.42 kB
+
+
+Γùï  (Static)   prerendered as static content
+╞Æ  (Dynamic)  server-rendered on demand
+

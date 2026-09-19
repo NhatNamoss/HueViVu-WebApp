@@ -394,6 +394,26 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── Combo Tours ───────────────────────────────────── */}
+      <section className="section">
+        <div className="section-header">
+          <h2 className="section-title">🎫 Combo Tour hot</h2>
+          <Link href="/tours-combo" className="see-all">Xem tất cả</Link>
+        </div>
+        <Link href="/tours-combo" style={{ display: 'block' }}>
+          <div className="card" style={{ overflow: 'hidden', position: 'relative' }}>
+            <div style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ width: 56, height: 56, borderRadius: 'var(--radius-md)', background: 'linear-gradient(135deg, #FF7F6B, #FFB199)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', flexShrink: 0 }}>🎯</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: '0.9375rem', fontWeight: 700, color: 'var(--navy)', marginBottom: 4 }}>Lộ trình có sẵn — Chọn & Đi</p>
+                <p style={{ fontSize: '0.75rem', color: 'var(--navy-muted)', lineHeight: 1.5 }}>Combo tour do người Huế chọn lọc. Không cần lên kế hoạch.</p>
+              </div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--coral)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+          </div>
+        </Link>
+      </section>
+
       {/* ── CTA ──────────────────────────────────────────── */}
       <section className="section" style={{ marginBottom: 100 }}>
         <div style={{

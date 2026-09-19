@@ -173,6 +173,36 @@ function createSchema(db: Database.Database) {
       created_at    TEXT DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS tours (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      slug TEXT UNIQUE,
+      description TEXT,
+      short_desc TEXT,
+      theme TEXT DEFAULT 'classic',
+      duration_hours REAL DEFAULT 8,
+      price INTEGER DEFAULT 0,
+      original_price INTEGER DEFAULT 0,
+      cover_img TEXT DEFAULT '/assets/citadel.png',
+      gallery TEXT DEFAULT '[]',
+      place_ids TEXT DEFAULT '[]',
+      highlights TEXT DEFAULT '[]',
+      includes TEXT DEFAULT '[]',
+      excludes TEXT DEFAULT '[]',
+      difficulty TEXT DEFAULT 'easy',
+      max_people INTEGER DEFAULT 10,
+      rating REAL DEFAULT 4.8,
+      review_count INTEGER DEFAULT 0,
+      tags TEXT DEFAULT '[]',
+      is_featured INTEGER DEFAULT 0,
+      is_active INTEGER DEFAULT 1,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tours_active ON tours(is_active, sort_order);
+    CREATE INDEX IF NOT EXISTS idx_tours_featured ON tours(is_featured, is_active);
+
     CREATE INDEX IF NOT EXISTS idx_events_user ON user_events(user_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_events_place ON user_events(place_id, event_type);
     CREATE INDEX IF NOT EXISTS idx_feedback_trip ON trip_feedback(trip_id);

@@ -1,0 +1,12 @@
+﻿node.exe :  ΓÜá Port 3000 is in use, trying 3001 instead.
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ( ΓÜá Port 3000 ...g 3001 instead.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  Γû▓ Next.js 14.2.35
+  - Local:        http://localhost:3001
+  - Environments: .env.local
+
+ Γ£ô Starting...

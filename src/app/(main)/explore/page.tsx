@@ -249,13 +249,13 @@ function ExploreInner() {
         </div>
 
         {loading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="places-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} style={{ height: 220, borderRadius: 'var(--radius-lg)' }} className="skeleton" />
             ))}
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="places-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {places.map(place => (
               <PlaceCard key={place.id} place={place} layout="grid" />
             ))}

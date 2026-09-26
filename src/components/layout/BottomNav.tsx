@@ -82,6 +82,7 @@ export default function BottomNav() {
           >
             {item.icon(isActive)}
             {!item.isCenter && <span>{item.label}</span>}
+            {item.isCenter && <span className="nav-center-label">{item.label}</span>}
           </Link>
         );
       })}

@@ -119,7 +119,7 @@ export default function TourComboPage() {
             <p style={{ fontSize: '0.875rem' }}>Đội ngũ đang chuẩn bị những trải nghiệm tuyệt vời cho bạn.</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div className="tour-cards-list" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {filtered.map(t => (
               <Link key={t.id} href={`/tours-combo/${t.id}`}>
                 <div className="card" style={{ display: 'flex', gap: 14, padding: 0, overflow: 'hidden' }}>

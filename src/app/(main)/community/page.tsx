@@ -66,7 +66,7 @@ export default function CommunityPage() {
             <Link href="/flow" className="btn-primary" style={{ display: 'inline-flex' }}>✨ Tạo & chia sẻ</Link>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div className="feed-list" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {feed.map(trip => (
               <div key={trip.id} style={{ background: 'var(--card-bg)', borderRadius: 'var(--radius-lg)', padding: '16px', boxShadow: 'var(--shadow-sm)', border: '1px solid rgba(255,255,255,0.6)' }}>
                 {/* User & Meta */}

@@ -123,7 +123,7 @@ export default function HomePage() {
   return (
     <>
       {/* ── Header ───────────────────────────────────────── */}
-      <header style={{
+      <header className="home-header" style={{
         position: 'sticky', top: 0, zIndex: 50,
         padding: '14px 20px',
         paddingTop: 'max(14px, env(safe-area-inset-top, 14px))',
@@ -134,7 +134,7 @@ export default function HomePage() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <div>
-          <p style={{ fontSize: '0.75rem', color: 'var(--coral)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 2 }}>
+          <p className="home-brand-label" style={{ fontSize: '0.75rem', color: 'var(--coral)', fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 2 }}>
             HueViVu
           </p>
           <h1 style={{
@@ -295,7 +295,7 @@ export default function HomePage() {
             Hôm nay tận hưởng gì?
           </h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+        <div className="day-rhythm-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
           {dayRhythm.map((item, i) => {
             const isCurrentTime = (
               (item.time === 'Sáng' && hour >= 5 && hour < 10) ||
@@ -345,7 +345,7 @@ export default function HomePage() {
         <div style={{ marginBottom: 12 }}>
           <h2 className="section-title">✨ AI có thể giúp gì?</h2>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+        <div className="quick-actions-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
           {[
             { icon: '📸', label: 'Xem live', href: '/live', color: 'rgba(255,127,107,0.1)' },
             { icon: '🗺️', label: 'Lên kế hoạch', href: '/flow', color: 'rgba(107,143,113,0.12)' },
@@ -384,7 +384,7 @@ export default function HomePage() {
           <h2 className="section-title">🔥 Địa điểm nổi bật</h2>
           <Link href="/explore" className="see-all">Xem tất cả</Link>
         </div>
-        <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+        <div className="featured-scroll" style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
           {filtered.slice(0, 6).map(place => (
             <PlaceCard key={place.id} place={place} layout="horizontal" />
           ))}

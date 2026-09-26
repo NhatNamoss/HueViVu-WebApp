@@ -562,46 +562,177 @@ a { text-decoration: none; color: inherit; }
 /* ================================================================
    PLACE CARDS
    ================================================================ */
+.place-card-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
 .place-card {
-  background: var(--card-bg);
-  border-radius: var(--radius-lg);
+  background: var(--soft-white);
+  border-radius: 22px;
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 2px 12px rgba(26, 29, 59, 0.07);
   transition: all 0.3s var(--ease-out);
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
 .place-card:hover {
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 8px 28px rgba(26, 29, 59, 0.1);
   transform: translateY(-3px);
 }
 
+/* ── Image area ─────────────────────────────────────────────── */
 .place-card-img {
   position: relative;
   width: 100%;
-  aspect-ratio: 4/3;
+  aspect-ratio: 16 / 9;
   overflow: hidden;
 }
 
 .place-card-img img {
-  width: 100%; height: 100%;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   transition: transform 0.5s ease;
 }
 
-.place-card:hover .place-card-img img { transform: scale(1.05); }
+.place-card:hover .place-card-img img {
+  transform: scale(1.05);
+}
 
+/* Category label — top left */
 .place-badge {
   position: absolute;
-  top: 8px; left: 8px;
-  background: linear-gradient(135deg, var(--coral), var(--warm-orange));
+  top: 10px;
+  left: 10px;
+  background: rgba(255, 127, 107, 0.8);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   color: white;
   font-size: 0.625rem;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 3px 8px;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
   border-radius: var(--radius-full);
+}
+
+/* Save button — top right */
+.place-save-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(26, 29, 59, 0.25);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s var(--ease-spring);
+}
+
+.place-save-btn:hover {
+  background: rgba(26, 29, 59, 0.4);
+  transform: scale(1.1);
+}
+
+.place-save-btn:active {
+  transform: scale(0.92);
+}
+
+/* ── Body / Info area ───────────────────────────────────────── */
+.place-card-body {
+  position: relative;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+/* Decorative Hue cloud motif — very subtle */
+.place-card-motif {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  width: 60px;
+  height: 28px;
+  opacity: 0.045;
+  background:
+    radial-gradient(ellipse 20px 12px at 30px 18px, var(--navy) 98%, transparent),
+    radial-gradient(ellipse 14px 10px at 16px 20px, var(--navy) 98%, transparent),
+    radial-gradient(ellipse 12px 8px at 46px 22px, var(--navy) 98%, transparent);
+  pointer-events: none;
+}
+
+.place-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.place-card-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--navy);
+  line-height: 1.3;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.place-card-rating {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--warm-orange);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-top: 3px;
+}
+
+/* ── Meta row (duration + cost) ─────────────────────────────── */
+.place-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.place-card-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8125rem;
+  color: var(--navy-muted);
+  font-weight: 500;
+}
+
+/* ── CTA link ───────────────────────────────────────────────── */
+.place-card-cta {
+  margin-top: auto;
+  padding-top: 4px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--coral);
+  transition: color 0.2s;
+}
+
+.place-card:hover .place-card-cta {
+  color: var(--warm-orange);
 }
 
 /* ================================================================
@@ -885,3 +1016,395 @@ a { text-decoration: none; color: inherit; }
   background: linear-gradient(to bottom, rgba(255,127,107,0.4), rgba(255,127,107,0.1));
   margin: 0 auto;
 }
+
+/* Center nav label — hidden on mobile, shown on desktop */
+.nav-center-label {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .nav-center-label {
+    display: inline;
+  }
+}
+
+/* ================================================================
+   DESKTOP LAYOUT — min-width: 1024px
+   Mobile layout preserved below this breakpoint.
+   Targets: 1366px (laptop), 1440px, 1920px.
+   ================================================================ */
+
+@media (min-width: 1024px) {
+
+  /* ── Shell: sidebar + centered content ─────────────────────── */
+  .app-shell {
+    flex-direction: row;
+  }
+
+  .page-content {
+    padding-bottom: 0;
+    margin-left: 240px;          /* sidebar width */
+    max-width: 1200px;
+    width: calc(100% - 240px);
+    padding-left: 40px;
+    padding-right: 40px;
+    padding-top: 8px;
+  }
+
+  /* ── Sidebar nav replaces bottom nav ───────────────────────── */
+  .bottom-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: auto;
+    width: 240px;
+    height: 100dvh;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 24px 12px;
+    padding-bottom: 24px;
+    gap: 2px;
+    border-top: none;
+    border-right: 1px solid rgba(255, 127, 107, 0.08);
+    background: rgba(255, 249, 247, 0.98);
+    overflow-y: auto;
+  }
+
+  .bottom-nav::before {
+    content: 'HueViVu';
+    display: block;
+    font-family: var(--font);
+    font-size: 1.375rem;
+    font-weight: 800;
+    color: var(--coral);
+    letter-spacing: -0.02em;
+    padding: 8px 14px 28px;
+  }
+
+  .nav-item {
+    flex: none;
+    flex-direction: row;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    justify-content: flex-start;
+  }
+
+  .nav-item:hover {
+    background: rgba(255, 127, 107, 0.06);
+  }
+
+  .nav-item.active {
+    background: rgba(255, 127, 107, 0.1);
+    color: var(--coral);
+  }
+
+  .nav-item.active svg {
+    transform: none;
+  }
+
+  .nav-item:active {
+    transform: none;
+  }
+
+  /* Center-button loses its floating style */
+  .nav-item-center > div {
+    width: 32px !important;
+    height: 32px !important;
+    margin-top: 0 !important;
+    box-shadow: none !important;
+    border-radius: var(--radius-sm) !important;
+  }
+
+  .nav-item-center > div svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* ── Ambient orbs — bigger on desktop ──────────────────────── */
+  .orb-1 {
+    width: 500px;
+    height: 500px;
+    top: -120px;
+    right: 10%;
+  }
+
+  .orb-2 {
+    width: 400px;
+    height: 400px;
+    left: 20%;
+  }
+
+  /* ── Section spacing ───────────────────────────────────────── */
+  .section {
+    padding: 0;
+    margin-bottom: 32px;
+  }
+
+  .section-title {
+    font-size: 1.25rem;
+  }
+
+  /* ── Page header (sticky top bar on subpages) ──────────────── */
+  .page-header {
+    padding: 20px 0;
+    background: transparent;
+    backdrop-filter: none;
+    border-bottom: 1px solid rgba(26, 29, 59, 0.06);
+    position: relative;
+    margin-bottom: 8px;
+  }
+
+  .page-header-title {
+    font-size: 1.5rem;
+  }
+
+  /* ── Filter chips — don't scroll, wrap ─────────────────────── */
+  .filter-chips {
+    flex-wrap: wrap;
+    padding: 0;
+    overflow: visible;
+  }
+
+  /* ── Cards — hover refinement ──────────────────────────────── */
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .place-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* ── Search bar — wider ────────────────────────────────────── */
+  .search-bar {
+    max-width: 600px;
+  }
+
+  /* ── Timeline cards ────────────────────────────────────────── */
+  .tl-card {
+    padding: 18px 20px;
+  }
+
+  /* ── Hero greeting — bigger on desktop ─────────────────────── */
+  .hero-greeting {
+    font-size: 2rem;
+  }
+
+  /* ── Flow options — row layout for wide screens ────────────── */
+  .option-card {
+    padding: 24px 16px;
+  }
+
+  .option-row {
+    padding: 18px 24px;
+  }
+}
+
+/* ================================================================
+   DESKTOP — PAGE-SPECIFIC LAYOUT OVERRIDES
+   !important needed to override inline styles on grids.
+   ================================================================ */
+
+@media (min-width: 1024px) {
+
+  /* ── Homepage header — no sticky duplicate with sidebar ─────── */
+  .home-header {
+    position: relative !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border-bottom: 1px solid rgba(26, 29, 59, 0.06) !important;
+    padding: 20px 0 !important;
+    margin-bottom: 8px;
+  }
+
+  .home-brand-label {
+    display: none;
+  }
+
+  .home-header h1 {
+    font-size: 1.75rem !important;
+  }
+
+  /* ── Day rhythm grid: 4 columns on desktop ─────────────────── */
+  .day-rhythm-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 14px !important;
+  }
+
+  /* ── Quick actions: stay 4-col but larger padding ──────────── */
+  .quick-actions-grid {
+    gap: 12px !important;
+  }
+
+  /* ── Featured places: wrap instead of scroll ───────────────── */
+  .featured-scroll {
+    flex-wrap: wrap !important;
+    overflow-x: visible !important;
+  }
+
+  .featured-scroll > a {
+    width: calc(25% - 9px) !important;
+    flex-shrink: 1 !important;
+  }
+
+  /* ── Explore page: 3-col grid ──────────────────────────────── */
+  .places-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 16px !important;
+  }
+
+  /* ── Community feed: 2-col masonry-style ────────────────────── */
+  .feed-list {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 16px !important;
+  }
+
+  /* ── Section/wrapper inline padding kill ──────────────────────
+     Pages use inline style={{ padding: '0 20px' }} etc.
+     .page-content already provides 40px horizontal padding,
+     so zero out inline horizontal padding on section-level wrappers.
+     ponytail: migrate inline styles to Tailwind responsive classes */
+  .page-content > section[style*="padding"] {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  /* Community banner horizontal margin — .page-content handles spacing */
+  .page-content > div[style*="margin"][style*="20px"] {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  /* Explore page filter wrapper padding */
+  .page-content > div[style*="padding:14px 20px"],
+  .page-content > div[style*="padding: 14px 20px"] {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  /* ── Tour combo cards: 2-col grid on desktop ───────────────── */
+  .tour-cards-list {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 16px !important;
+  }
+
+  /* Tour card image wider in 2-col layout */
+  .tour-cards-list .card[style*="display: flex"],
+  .tour-cards-list .card[style*="display:flex"] {
+    min-height: 180px;
+  }
+
+  .tour-cards-list .card > div:first-child {
+    width: 180px !important;
+    min-height: 180px !important;
+  }
+
+  /* ── Tour featured carousel: wrap on desktop ───────────────── */
+  .section > div[style*="overflowX"],
+  .section > div[style*="overflow-x"] {
+    flex-wrap: wrap !important;
+    overflow-x: visible !important;
+  }
+
+  .section > div[style*="overflowX"] > a,
+  .section > div[style*="overflow-x"] > a {
+    width: calc(33.333% - 10px) !important;
+    flex-shrink: 1 !important;
+  }
+
+  /* ── Community feed empty state centering ───────────────────── */
+  .feed-list > div[style*="gridColumn"] {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (min-width: 1440px) {
+  .page-content {
+    max-width: 1280px;
+  }
+
+  .section-title {
+    font-size: 1.375rem;
+  }
+
+  .hero-greeting {
+    font-size: 2.25rem;
+  }
+
+  .places-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 18px !important;
+  }
+
+  .featured-scroll > a {
+    width: calc(20% - 10px) !important;
+  }
+
+  .feed-list {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 20px !important;
+  }
+
+  .tour-cards-list {
+    gap: 20px !important;
+  }
+
+  .tour-cards-list .card > div:first-child {
+    width: 200px !important;
+  }
+
+  /* Tour featured → 3-col stays comfortable */
+  .section > div[style*="overflowX"] > a,
+  .section > div[style*="overflow-x"] > a {
+    width: calc(25% - 11px) !important;
+  }
+}
+
+@media (min-width: 1920px) {
+  .page-content {
+    max-width: 1400px;
+    margin-left: 280px;
+    padding-left: 60px;
+    padding-right: 60px;
+  }
+
+  .bottom-nav {
+    width: 280px;
+    padding: 32px 16px;
+  }
+
+  .bottom-nav::before {
+    font-size: 1.5rem;
+    padding-bottom: 36px;
+  }
+
+  .nav-item {
+    padding: 14px 18px;
+    font-size: 1rem;
+  }
+
+  .tour-cards-list {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+
+/* ================================================================
+   STANDALONE PAGES (Flow, Onboarding, etc.) — Desktop centering
+   These pages don't use (main) layout, so no sidebar.
+   ================================================================ */
+@media (min-width: 1024px) {
+  .flow-page-shell {
+    max-width: 720px;
+    margin: 0 auto;
+  }
+}
+
+

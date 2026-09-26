@@ -175,7 +175,7 @@ export default function FlowPage() {
 
 
   return (
-    <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--soft-white)' }}>
+    <div className="flow-page-shell" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', background: 'var(--soft-white)' }}>
       <header style={{ position: 'sticky', top: 0, zIndex: 50, padding: '14px 20px', background: 'rgba(255,249,247,0.95)', backdropFilter: 'blur(16px)', borderBottom: '1px solid rgba(255,127,107,0.07)', display: 'flex', alignItems: 'center', gap: 12 }}>
         <button onClick={() => router.back()} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(26,29,59,0.06)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--navy)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>

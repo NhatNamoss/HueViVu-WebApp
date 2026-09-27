@@ -92,6 +92,12 @@ export default function FlowPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Kiểm tra đăng nhập
+  useEffect(() => {
+    const token = localStorage.getItem('hv_token');
+    if (!token) { router.push('/onboarding'); return; }
+  }, [router]);
+
   // Lấy vị trí user khi mở trang
   useEffect(() => {
     if (navigator.geolocation) {

@@ -40,12 +40,12 @@ export default function OnboardingPage() {
 
   if (mode === 'intro') {
     return (
-      <div style={{ minHeight: '100dvh', background: 'var(--soft-white)', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ flex: 1, position: 'relative' }}>
-          <img src="/assets/hero-hub.png" alt="Huế" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      <div style={{ minHeight: '100dvh', background: 'var(--soft-white)', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', overflow: 'hidden' }}>
+        <div style={{ width: '100%', maxWidth: 600, margin: '0 auto', position: 'relative', maxHeight: '50vh', overflow: 'hidden' }}>
+          <img src="/assets/hero-hub.png" alt="Huế" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 0%, var(--soft-white) 90%, var(--soft-white) 100%)' }} />
         </div>
-        <div style={{ padding: '0 32px 40px', textAlign: 'center', position: 'relative', zIndex: 10, marginTop: '-120px' }}>
+        <div style={{ padding: '0 32px 40px', textAlign: 'center', position: 'relative', zIndex: 10, marginTop: '-80px', maxWidth: 500, width: '100%' }}>
           <div className="ai-badge" style={{ marginBottom: 20 }}>
             <span className="ai-badge-dot" />AI Travel Companion
           </div>
@@ -69,7 +69,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div style={{ minHeight: '100dvh', background: 'var(--soft-white)', display: 'flex', flexDirection: 'column', padding: '24px', position: 'relative' }}>
+    <div style={{ minHeight: '100dvh', background: 'var(--soft-white)', display: 'flex', flexDirection: 'column', padding: '24px', position: 'relative', alignItems: 'center' }}>
       <button onClick={() => setMode('intro')} style={{ position: 'absolute', top: 24, left: 24, background: 'var(--card-bg)', border: '1px solid rgba(26,29,59,0.06)', borderRadius: '50%', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 10 }}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
       </button>

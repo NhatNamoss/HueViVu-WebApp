@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import PlaceForm from '@/components/admin/PlaceForm';
 import TaskTracker from '@/components/admin/TaskTracker';
+import { authenticatedHeaders } from '@/lib/client-auth';
 
 export default function EditPlacePage({ params }: { params: { id: string } }) {
   const [initialData, setInitialData] = useState<any>(null);
@@ -11,7 +12,7 @@ export default function EditPlacePage({ params }: { params: { id: string } }) {
   useEffect(() => {
     const fetchPlace = async () => {
       try {
-        const res = await fetch(`/api/places/${params.id}`);
+        const res = await fetch(`/api/places/${params.id}`, { headers: authenticatedHeaders() });
         if (!res.ok) throw new Error('Không tìm thấy địa điểm');
         const data = await res.json();
         

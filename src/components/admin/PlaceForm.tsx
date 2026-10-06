@@ -29,7 +29,18 @@ const emptyForm = {
 };
 
 type FormState = typeof emptyForm;
-type FieldProps = { label: string; name: keyof FormState; required?: boolean; hint?: string; type?: string; placeholder?: string };
+type FieldProps = { label: string; name: keyof FormState; value: string; onChange: (name: keyof FormState, value: string) => void; fieldClass: string; required?: boolean; hint?: string; type?: string; placeholder?: string };
+
+function Field({ label, name, value, onChange, fieldClass, required, hint, type = 'text', placeholder }: FieldProps) {
+  return (
+    <label className="space-y-1.5 block">
+      <span className="text-sm font-medium text-gray-700">{label}{required && ' *'}</span>
+      <input required={required} type={type} name={name} value={value}
+        onChange={event => onChange(name, event.target.value)} placeholder={placeholder} className={fieldClass} />
+      {hint && <span className="text-xs text-gray-400">{hint}</span>}
+    </label>
+  );
+}
 
 function textList(value: unknown) {
   if (Array.isArray(value)) return value.join('\n');
@@ -108,14 +119,7 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
   }, [form]);
 
   const fieldClass = 'w-full p-2.5 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-orange-300 bg-white';
-  const Field = ({ label, name, required, hint, type = 'text', placeholder }: FieldProps) => (
-    <label className="space-y-1.5 block">
-      <span className="text-sm font-medium text-gray-700">{label}{required && ' *'}</span>
-      <input required={required} type={type} name={name} value={String(form[name] ?? '')}
-        onChange={event => set(name, event.target.value)} placeholder={placeholder} className={fieldClass} />
-      {hint && <span className="text-xs text-gray-400">{hint}</span>}
-    </label>
-  );
+  const fp = (name: keyof FormState) => ({ name, value: String(form[name] ?? ''), onChange: set, fieldClass });
 
   const extractCoordinates = () => {
     const match = mapsInput.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/)
@@ -184,12 +188,12 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
       <section className={section}>
         <div><h2 className="text-lg font-bold text-gray-900">1. Thông tin cốt lõi</h2><p className="text-sm text-gray-500">Thông tin người dùng nhìn thấy và thuật toán dùng trực tiếp.</p></div>
         <div className="grid md:grid-cols-2 gap-4">
-          <Field label="Tên địa điểm" name="name" required />
+          <Field label="Tên địa điểm" {...fp('name')} required />
           <label className="space-y-1.5"><span className="text-sm font-medium text-gray-700">Danh mục *</span><select value={form.category} onChange={e => set('category', e.target.value)} className={fieldClass}>{PLACE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}</select></label>
         </div>
         <label className="space-y-1.5 block"><span className="text-sm font-medium text-gray-700">Mô tả đã kiểm chứng *</span><textarea value={form.description} onChange={e => set('description', e.target.value)} rows={5} className={fieldClass} placeholder="Mô tả điều nổi bật, phù hợp với ai và trải nghiệm thực tế. Tối thiểu 60 ký tự." /><span className="text-xs text-gray-400">{form.description.length}/60 ký tự tối thiểu</span></label>
-        <div className="grid md:grid-cols-2 gap-4"><Field label="Địa chỉ" name="address" required /><Field label="Giá tham khảo" name="price" /></div>
-        <div className="grid md:grid-cols-3 gap-4"><Field label="Số điện thoại" name="phone" /><Field label="Website" name="website" type="url" /><Field label="Ảnh đại diện" name="img" placeholder="/uploads/... hoặc https://..." /></div>
+        <div className="grid md:grid-cols-2 gap-4"><Field label="Địa chỉ" {...fp('address')} required /><Field label="Giá tham khảo" {...fp('price')} /></div>
+        <div className="grid md:grid-cols-3 gap-4"><Field label="Số điện thoại" {...fp('phone')} /><Field label="Website" {...fp('website')} type="url" /><Field label="Ảnh đại diện" {...fp('img')} placeholder="/uploads/... hoặc https://..." /></div>
         <div className="grid lg:grid-cols-[1fr_320px] gap-4 items-start">
           <div className="border border-dashed border-orange-200 bg-orange-50/50 rounded-2xl p-4"><div className="flex items-center justify-between"><div><p className="font-semibold text-sm">Kiểm tra địa điểm trùng</p><p className="text-xs text-gray-500 mt-1">So sánh tên, điện thoại, website và tọa độ trong bán kính 80 m.</p></div><button type="button" onClick={checkDuplicates} disabled={checkingDuplicates} className="px-3 py-2 bg-white border rounded-lg text-sm font-semibold">{checkingDuplicates?'Đang kiểm tra…':'Kiểm tra'}</button></div>{duplicates.length>0&&<div className="mt-3 space-y-2">{duplicates.slice(0,5).map(item=><div key={item.id} className="p-3 bg-white border rounded-xl"><p className="font-semibold text-sm">{item.name}</p><p className="text-xs text-red-600 mt-1">{item.reasons.join(' · ')}</p><Link href={`/admin/data-collector/edit/${item.id}`} className="text-xs text-orange-600 font-semibold">Mở để so sánh →</Link></div>)}<label className="flex gap-2 text-xs text-gray-600"><input type="checkbox" checked={allowDuplicate} onChange={event=>setAllowDuplicate(event.target.checked)}/>Tôi đã so sánh và xác nhận đây là địa điểm khác.</label></div>}</div>
           <div className="bg-white border rounded-2xl overflow-hidden shadow-sm"><div className="h-32 bg-gray-100">{form.img?<img src={form.img} alt="Preview" className="w-full h-full object-cover" onError={event=>(event.currentTarget.style.display='none')}/>:<div className="h-full flex items-center justify-center text-gray-400 text-sm">Chưa có ảnh</div>}</div><div className="p-4"><p className="text-[10px] font-bold tracking-widest text-orange-500">PREVIEW TRÊN ỨNG DỤNG</p><p className="font-bold text-gray-900 mt-1">{form.name||'Tên địa điểm'}</p><p className="text-xs text-gray-500 mt-1 line-clamp-2">{form.description||'Mô tả sẽ hiển thị tại đây.'}</p><div className="flex justify-between text-xs mt-3"><span>{form.price||'Chưa có giá'}</span><span>⭐ {form.rating}</span></div></div></div>
@@ -202,8 +206,8 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
           <input value={mapsInput} onChange={e => setMapsInput(e.target.value)} className={`${fieldClass} flex-1`} placeholder="Dán link Maps đầy đủ hoặc tọa độ 16.46, 107.59" />
           <button type="button" onClick={extractCoordinates} className="px-4 py-2 bg-white border rounded-lg font-semibold text-sm">Lấy tọa độ</button>
         </div>
-        <div className="grid md:grid-cols-2 gap-4"><Field label="Vĩ độ" name="lat" required /><Field label="Kinh độ" name="lng" required /></div>
-        <div className="grid md:grid-cols-3 gap-4"><Field label="Giờ hiển thị" name="hours" placeholder="Tự sinh từ lịch tuần nếu để trống" /><Field label="Khung giờ cũ" name="hours_time" placeholder="07:00-17:30" /><Field label="Ghi chú giờ" name="hours_note" placeholder="Đóng quầy vé trước 30 phút" /></div>
+        <div className="grid md:grid-cols-2 gap-4"><Field label="Vĩ độ" {...fp('lat')} required /><Field label="Kinh độ" {...fp('lng')} required /></div>
+        <div className="grid md:grid-cols-3 gap-4"><Field label="Giờ hiển thị" {...fp('hours')} placeholder="Tự sinh từ lịch tuần nếu để trống" /><Field label="Khung giờ cũ" {...fp('hours_time')} placeholder="07:00-17:30" /><Field label="Ghi chú giờ" {...fp('hours_note')} placeholder="Đóng quầy vé trước 30 phút" /></div>
         <div className="border border-gray-200 rounded-2xl overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 flex items-center justify-between gap-3"><div><p className="font-semibold text-sm text-gray-800">Lịch mở cửa 7 ngày</p><p className="text-xs text-gray-500">Hỗ trợ nghỉ trưa hoặc nhiều ca trong ngày.</p></div><button type="button" onClick={copyMonday} disabled={!form.opening_hours.mon.length} className="text-xs font-semibold text-orange-600 disabled:opacity-40">Sao chép Thứ 2 cho cả tuần</button></div>
           <div className="divide-y">{WEEK_DAYS.map(day => {
@@ -223,14 +227,14 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
       <section className={section}>
         <div><h2 className="text-lg font-bold text-gray-900">3. Chất lượng cho bộ máy lập lịch</h2><p className="text-sm text-gray-500">Các trường này ảnh hưởng trực tiếp đến thứ tự gợi ý.</p></div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Field label="Rating 1–5" name="rating" type="number" /><Field label="Độ phổ biến 0–1" name="popularity" type="number" />
-          <Field label="Thời gian tham quan (phút)" name="avg_visit_min" type="number" />
+          <Field label="Rating 1–5" {...fp('rating')} type="number" /><Field label="Độ phổ biến 0–1" {...fp('popularity')} type="number" />
+          <Field label="Thời gian tham quan (phút)" {...fp('avg_visit_min')} type="number" />
           <label className="space-y-1.5"><span className="text-sm font-medium text-gray-700">Bữa ăn phù hợp</span><select disabled={!isFoodCategory(form.category)} value={form.meal_type} onChange={e => set('meal_type', e.target.value)} className={fieldClass}>{MEAL_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         </div>
         <div className="grid md:grid-cols-3 gap-4">
           <label className="space-y-1.5"><span className="text-sm font-medium text-gray-700">Đông đúc</span><select value={form.crowd_level} onChange={e => set('crowd_level', e.target.value)} className={fieldClass}><option value="low">Thấp</option><option value="medium">Trung bình</option><option value="high">Đông</option></select></label>
           <label className="space-y-1.5"><span className="text-sm font-medium text-gray-700">Thể lực</span><select value={form.physical_level} onChange={e => set('physical_level', e.target.value)} className={fieldClass}><option value="easy">Dễ</option><option value="moderate">Vừa</option><option value="hard">Khó</option></select></label>
-          <Field label="Độ bản địa 1–5" name="authenticity" type="number" />
+          <Field label="Độ bản địa 1–5" {...fp('authenticity')} type="number" />
         </div>
       </section>
 
@@ -250,8 +254,8 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
 
       <section className={`${section} border-2 border-green-200`}>
         <div><h2 className="text-lg font-bold text-gray-900">5. Bằng chứng xác minh</h2><p className="text-sm text-gray-500">Không tự động thu thập. Người nhập chịu trách nhiệm đối chiếu nguồn và ghi rõ ghi chú.</p></div>
-        <div className="grid md:grid-cols-2 gap-4"><Field label="Tên nguồn" name="source_name" required placeholder="Website chính thức / khảo sát tại chỗ" /><Field label="URL nguồn" name="source_url" type="url" placeholder="https://..." /></div>
-        <div className="grid md:grid-cols-2 gap-4"><Field label="Người kiểm chứng" name="verified_by" required /><Field label="Lần xác minh gần nhất" name="verified_at" type="datetime-local" /></div>
+        <div className="grid md:grid-cols-2 gap-4"><Field label="Tên nguồn" {...fp('source_name')} required placeholder="Website chính thức / khảo sát tại chỗ" /><Field label="URL nguồn" {...fp('source_url')} type="url" placeholder="https://..." /></div>
+        <div className="grid md:grid-cols-2 gap-4"><Field label="Người kiểm chứng" {...fp('verified_by')} required /><Field label="Lần xác minh gần nhất" {...fp('verified_at')} type="datetime-local" /></div>
         <div className="grid md:grid-cols-2 gap-4"><label className="space-y-1.5"><span className="text-sm font-medium text-gray-700">Chu kỳ kiểm tra lại</span><select value={form.reverify_after_days} onChange={event=>set('reverify_after_days',event.target.value)} className={fieldClass}><option value="30">30 ngày — dữ liệu biến động cao</option><option value="60">60 ngày</option><option value="90">90 ngày — mặc định</option></select></label><div className="p-3 bg-gray-50 rounded-xl"><p className="text-xs text-gray-500">Trạng thái xuất bản</p><p className="font-semibold mt-1">{form.publication_status==='published'?'🔵 Đang hiển thị trên ứng dụng':form.publication_status==='archived'?'⚫ Đã lưu trữ':'🟠 Chưa xuất bản'}</p>{currentRole==='admin'&&initialData&&<div className="flex gap-2 mt-2"><button type="button" onClick={()=>submit(form.verification_status as any,'published')} className="text-xs font-semibold text-blue-600">Xuất bản</button><button type="button" onClick={()=>submit(form.verification_status as any,'archived')} className="text-xs font-semibold text-gray-500">Lưu trữ</button></div>}</div></div>
         <label className="space-y-1.5 block"><span className="text-sm font-medium text-gray-700">Ghi chú kiểm chứng</span><textarea value={form.verification_notes} onChange={e => set('verification_notes', e.target.value)} rows={3} className={fieldClass} placeholder="Đã gọi điện xác nhận giờ mở cửa; giá vé kiểm tra tại quầy..." /></label>
       </section>

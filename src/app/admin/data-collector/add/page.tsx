@@ -1,4 +1,5 @@
 import PlaceForm from '@/components/admin/PlaceForm';
+import TaskTracker from '@/components/admin/TaskTracker';
 
 export default function AddPlacePage() {
   return (
@@ -9,6 +10,7 @@ export default function AddPlacePage() {
       </div>
       
       <PlaceForm />
+      <TaskTracker />
     </div>
   );
 }

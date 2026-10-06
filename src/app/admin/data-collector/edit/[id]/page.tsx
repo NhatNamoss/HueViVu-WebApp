@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import PlaceForm from '@/components/admin/PlaceForm';
+import TaskTracker from '@/components/admin/TaskTracker';
 
 export default function EditPlacePage({ params }: { params: { id: string } }) {
   const [initialData, setInitialData] = useState<any>(null);
@@ -54,6 +55,7 @@ export default function EditPlacePage({ params }: { params: { id: string } }) {
       </div>
       
       <PlaceForm initialData={initialData} />
+      <TaskTracker placeId={params.id} />
     </div>
   );
 }

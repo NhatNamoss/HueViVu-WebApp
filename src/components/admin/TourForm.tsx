@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { authenticatedHeaders } from '@/lib/client-auth';
 
 const THEMES = [
   { value: 'classic', label: '🏛️ Di sản Cổ điển' },
@@ -64,7 +65,7 @@ export default function TourForm({ initialData, tourId }: TourFormProps) {
     setSaving(true);
     try {
       const res = await fetch(tourId ? `/api/tours/${tourId}` : '/api/tours',
-        { method: tourId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+        { method: tourId ? 'PUT' : 'POST', headers: authenticatedHeaders(true), body: JSON.stringify(form) });
       if (!res.ok) throw new Error();
       router.push('/admin/tours');
     } catch { alert('Lưu thất bại'); } finally { setSaving(false); }

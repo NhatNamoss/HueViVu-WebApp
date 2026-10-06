@@ -5,6 +5,7 @@ import { getAuthUserId } from '@/lib/auth';
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const userId = getAuthUserId(req);
+    if (!userId) return Response.json({ error: 'Cần đăng nhập hoặc phiên khách hợp lệ' }, { status: 401 });
     const { itinerary } = await req.json();
     if (!itinerary?.days) return Response.json({ error: 'Invalid itinerary' }, { status: 400 });
 
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const trip = db.prepare('SELECT * FROM trips WHERE id = ?').get(params.id) as any;
     if (!trip) return Response.json({ error: 'Trip not found' }, { status: 404 });
 
-    if (userId && trip.user_id !== userId && trip.user_id !== 'user_demo001') {
+    if (trip.user_id !== userId) {
       return Response.json({ error: 'Forbidden' }, { status: 403 });
     }
 

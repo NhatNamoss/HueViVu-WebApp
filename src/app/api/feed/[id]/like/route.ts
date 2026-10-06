@@ -1,13 +1,15 @@
 import { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getAuthUserId } from '@/lib/auth';
-import { v4 as uuidv4 } from 'uuid';
 
 // POST /api/feed/[id]/like  
 export async function POST(req: NextRequest, { params }: { params: { id: string; action: string } }) {
   const db = getDb();
-  const userId = getAuthUserId(req) || 'guest_' + Math.random().toString(36).slice(2, 9);
+  const userId = getAuthUserId(req);
+  if (!userId) return Response.json({ error: 'Cần đăng nhập để thích hành trình' }, { status: 401 });
   const tripId = params.id;
+  const trip = db.prepare('SELECT id FROM trips WHERE id = ? AND is_shared = 1').get(tripId);
+  if (!trip) return Response.json({ error: 'Không tìm thấy hành trình công khai' }, { status: 404 });
 
   const existing = db.prepare('SELECT 1 FROM trip_likes WHERE trip_id = ? AND user_id = ?').get(tripId, userId);
   if (existing) {

@@ -1017,15 +1017,36 @@ a { text-decoration: none; color: inherit; }
   margin: 0 auto;
 }
 
-/* Center nav label — hidden on mobile, shown on desktop */
+/* Center nav label remains visible so the primary action is understandable. */
 .nav-center-label {
-  display: none;
+  display: inline;
+  margin-top: -2px;
+  font-size: 0.58rem;
+  white-space: nowrap;
 }
 
 @media (min-width: 1024px) {
   .nav-center-label {
     display: inline;
   }
+}
+
+.place-detail-page {
+  padding-bottom: 164px;
+}
+
+.place-sticky-cta {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 64px;
+  z-index: 90;
+  display: flex;
+  gap: 10px;
+  padding: 12px 20px;
+  background: rgba(255, 249, 247, 0.97);
+  border-top: 1px solid rgba(26, 29, 59, 0.08);
+  backdrop-filter: blur(16px);
 }
 
 /* ================================================================
@@ -1049,6 +1070,16 @@ a { text-decoration: none; color: inherit; }
     padding-left: 40px;
     padding-right: 40px;
     padding-top: 8px;
+  }
+
+  .place-detail-page {
+    padding-bottom: 104px;
+  }
+
+  .place-sticky-cta {
+    left: 240px;
+    bottom: 0;
+    padding: 14px 40px 18px;
   }
 
   /* ── Sidebar nav replaces bottom nav ───────────────────────── */
@@ -1379,6 +1410,12 @@ a { text-decoration: none; color: inherit; }
   .bottom-nav {
     width: 280px;
     padding: 32px 16px;
+  }
+
+  .place-sticky-cta {
+    left: 280px;
+    padding-left: 60px;
+    padding-right: 60px;
   }
 
   .bottom-nav::before {

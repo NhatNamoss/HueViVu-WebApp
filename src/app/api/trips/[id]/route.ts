@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getAuthUserId } from '@/lib/auth';
-import { customizeTrip } from '@/lib/ai';
+import { presentTripBudget, presentTripTitle } from '@/lib/trip-presentation';
 
 // GET /api/trips/[id]
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -15,6 +15,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   trip.itinerary = JSON.parse(trip.itinerary || '{}');
   trip.highlights = JSON.parse(trip.highlights || '[]');
   trip.food_prefs = JSON.parse(trip.food_prefs || '[]');
+  trip.title = presentTripTitle(trip.title, trip.duration, trip.style);
+  trip.total_cost_estimate = presentTripBudget(trip.total_cost_estimate);
 
   const owner = db.prepare('SELECT name FROM users WHERE id = ?').get(trip.user_id) as any;
   trip.owner_name = owner?.name;
@@ -59,7 +61,18 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   if (!userId) return Response.json({ error: 'Cần đăng nhập' }, { status: 401 });
 
   const db = getDb();
-  const result = db.prepare('DELETE FROM trips WHERE id = ? AND user_id = ?').run(params.id, userId) as any;
-  if (!result.changes) return Response.json({ error: 'Trip not found' }, { status: 404 });
+  const remove = db.transaction(() => {
+    const owned = db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(params.id, userId);
+    if (!owned) return 0;
+    db.prepare('UPDATE journal_entries SET trip_id = NULL WHERE trip_id = ? AND user_id = ?').run(params.id, userId);
+    db.prepare('DELETE FROM chat_messages WHERE trip_id = ?').run(params.id);
+    db.prepare('DELETE FROM trip_likes WHERE trip_id = ?').run(params.id);
+    db.prepare('DELETE FROM trip_saves WHERE trip_id = ?').run(params.id);
+    db.prepare('UPDATE user_events SET trip_id = NULL WHERE trip_id = ?').run(params.id);
+    db.prepare('DELETE FROM trip_feedback WHERE trip_id = ?').run(params.id);
+    return db.prepare('DELETE FROM trips WHERE id = ? AND user_id = ?').run(params.id, userId).changes;
+  });
+  const changes = remove();
+  if (!changes) return Response.json({ error: 'Trip not found' }, { status: 404 });
   return Response.json({ success: true });
 }

@@ -1,12 +1,13 @@
 import { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getAuthUserId } from '@/lib/auth';
+import { v4 as uuidv4 } from 'uuid';
 
 export async function POST(req: NextRequest) {
   try {
     const userId = getAuthUserId(req);
     const body = await req.json();
-    const { event_type, place_id, sessionId, metadata } = body;
+    const { event_type, place_id, trip_id, sessionId, metadata, value } = body;
 
     if (!event_type) {
       return Response.json({ error: 'Thiếu event_type' }, { status: 400 });
@@ -16,14 +17,20 @@ export async function POST(req: NextRequest) {
     
     // In a real app we might track anonymous users via sessionId 
     // but for simplicity we log it either under userId or sessionId
+    const resolvedSessionId = sessionId || (userId ? `user:${userId}` : null);
+    if (!resolvedSessionId) return Response.json({ error: 'Thiếu sessionId' }, { status: 400 });
+
     db.prepare(`
-      INSERT INTO user_events (user_id, session_id, event_type, place_id, metadata)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO user_events (id, user_id, session_id, event_type, place_id, trip_id, value, context)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
+      uuidv4(),
       userId || null, 
-      sessionId || null,
+      resolvedSessionId,
       event_type,
       place_id || null,
+      trip_id || null,
+      Number.isFinite(Number(value)) ? Number(value) : null,
       metadata ? JSON.stringify(metadata) : null
     );
 

@@ -1,11 +1,12 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { getSessionId, trackEvent } from '@/lib/analytics';
 
 // ─── Types ────────────────────────────────────────────────────────
 type FlowState = {
   duration: string; companion: string; budget: string;
-  pacing: string; exploration: string; tags: string[];
+  pacing: string; exploration: string; tags: string[]; startDate: string;
 };
 
 // ─── Step Config ──────────────────────────────────────────────────
@@ -76,7 +77,7 @@ const COMPANION_BUDGET_WHISPERS: Record<string, string> = {
 type ChatMessage = { from: 'ai' | 'user'; text: string };
 
 const initialState: FlowState = {
-  duration: '', companion: '', budget: '', pacing: '', exploration: '', tags: [],
+  duration: '', companion: '', budget: '', pacing: '', exploration: '', tags: [], startDate: '',
 };
 
 
@@ -92,11 +93,9 @@ export default function FlowPage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Kiểm tra đăng nhập
   useEffect(() => {
-    const token = localStorage.getItem('hv_token');
-    if (!token) { router.push('/onboarding'); return; }
-  }, [router]);
+    getSessionId();
+  }, []);
 
   // Lấy vị trí user khi mở trang
   useEffect(() => {
@@ -116,6 +115,7 @@ export default function FlowPage() {
 
   const handlePick = (key: keyof FlowState, value: string) => {
     setState(prev => ({ ...prev, [key]: value }));
+    trackEvent('preference_select', { metadata: { key, value, step } });
     const whisper = COMPANION_BUDGET_WHISPERS[value] || DURATION_WHISPERS[value] || '';
     const label = STEP_OPTIONS[key]?.find(o => o.value === value)?.label ?? value;
     setChat(prev => [
@@ -154,15 +154,21 @@ export default function FlowPage() {
           duration: state.duration,
           styles: state.tags.map(t => t.replace(/^[\s\S]{1,2}\s/, '')),
           companion: state.companion,
-          budget: state.budget === 'budget' ? 300 : state.budget === 'moderate' ? 600 : state.budget === 'comfort' ? 1000 : 2000,
+          pacing: state.pacing,
+          exploration: state.exploration,
+          budget: state.budget === 'budget' ? 300000 : state.budget === 'moderate' ? 600000 : state.budget === 'comfort' ? 1000000 : 2000000,
           food: [],
           notes: freeInput,
+          startDate: state.startDate || undefined,
+          sessionId: getSessionId(),
           startLat: userLocation?.lat,
           startLng: userLocation?.lng,
         }),
       });
       const data = await res.json();
       if (data.tripId) {
+        if (data.token) localStorage.setItem('hv_token', data.token);
+        trackEvent('trip_generated', { trip_id: data.tripId, metadata: { duration: state.duration, companion: state.companion, tags: state.tags } });
         setTripId(data.tripId);
         setDone(true);
         setChat(prev => [...prev, { from: 'ai', text: `Xong rồi! Lịch trình ${state.duration} ngày đã sẵn sàng 🎉` }]);
@@ -236,6 +242,7 @@ export default function FlowPage() {
                 ))}
               </div>
               <textarea value={freeInput} onChange={e => setFreeInput(e.target.value)} placeholder="Ghi chú thêm (tuỳ chọn)..." style={{ width: '100%', padding: '12px', background: 'var(--card-bg)', border: '1.5px solid rgba(26,29,59,0.08)', borderRadius: 'var(--radius-md)', fontFamily: 'var(--font)', fontSize: '0.9rem', outline: 'none', color: 'var(--navy)', resize: 'none', minHeight: 60, lineHeight: 1.5 }} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--card-bg)', border: '1.5px solid rgba(26,29,59,0.08)', borderRadius: 'var(--radius-md)' }}><span style={{ fontSize: '1.1rem' }}>📅</span><span style={{ flex: 1, fontSize: '.8rem', fontWeight: 600, color: 'var(--navy)' }}>Ngày bắt đầu <small style={{ display: 'block', color: 'var(--navy-muted)', fontWeight: 400 }}>Giúp kiểm tra giờ mở cửa chính xác</small></span><input type="date" value={state.startDate} min={new Date().toISOString().slice(0, 10)} onChange={e => setState(prev => ({ ...prev, startDate: e.target.value }))} style={{ border: '1px solid rgba(26,29,59,.12)', borderRadius: 8, padding: '7px', color: 'var(--navy)' }} /></label>
               <button onClick={handleGenerate} disabled={state.tags.length === 0} className="btn-primary btn-ripple" style={{ width: '100%', opacity: state.tags.length === 0 ? 0.5 : 1 }}>
                 ✨ Tạo hành trình của tôi
               </button>

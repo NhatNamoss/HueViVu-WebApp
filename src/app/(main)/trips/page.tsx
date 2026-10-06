@@ -6,7 +6,14 @@ import { useRouter } from 'next/navigation';
 type Trip = {
   id: string; title: string; summary: string; duration: number;
   companion: string; total_cost_estimate: string; status: string;
-  created_at: string; ai_match_score: number; like_count: number;
+  created_at: string; start_date?: string; ai_match_score: number; like_count: number;
+};
+
+const COMPANION_LABELS: Record<string, string> = { solo: 'Một mình', couple: 'Cặp đôi', family: 'Gia đình', friends: 'Nhóm bạn' };
+const STATUS_META: Record<string, { label: string; color: string; background: string }> = {
+  active: { label: 'Đang đi', color: '#15803D', background: 'rgba(34,197,94,.1)' },
+  upcoming: { label: 'Sắp tới', color: '#C2410C', background: 'rgba(255,127,107,.11)' },
+  past: { label: 'Đã hoàn thành', color: '#6B6E8A', background: 'rgba(26,29,59,.06)' },
 };
 
 export default function TripsPage() {
@@ -21,17 +28,13 @@ export default function TripsPage() {
     fetch('/api/trips', { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json()).then(data => { setTrips(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(() => setLoading(false));
-  }, []);
+  }, [router]);
 
   const filtered = trips.filter(t => {
     if (activeTab === 'active') return t.status === 'active';
     if (activeTab === 'upcoming') return t.status === 'upcoming';
     return t.status === 'past';
   });
-
-  const statusColors: Record<string, string> = {
-    active: '#4CAF50', upcoming: 'var(--coral)', past: 'var(--gray-soft)',
-  };
 
   return (
     <>
@@ -52,9 +55,9 @@ export default function TripsPage() {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, padding: '8px 20px 0', borderBottom: '1px solid rgba(26,29,59,0.06)', marginBottom: 16 }}>
         {[
-          { key: 'active', label: 'Đang diễn ra' },
+          { key: 'active', label: 'Đang đi' },
           { key: 'upcoming', label: 'Sắp tới' },
-          { key: 'past', label: 'Đã qua' },
+          { key: 'past', label: 'Đã xong' },
         ].map(tab => (
           <button
             key={tab.key}
@@ -67,7 +70,7 @@ export default function TripsPage() {
               marginBottom: -1, transition: 'all 0.2s', fontFamily: 'var(--font)',
             }}
           >
-            {tab.label}
+            {tab.label} <span style={{ marginLeft: 3, opacity: .65 }}>{trips.filter(trip => trip.status === tab.key).length}</span>
           </button>
         ))}
       </div>
@@ -115,43 +118,23 @@ export default function TripsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
             {filtered.map(trip => (
               <Link key={trip.id} href={`/trips/${trip.id}`} style={{ textDecoration: 'none' }}>
-                <div className="card" style={{ padding: '16px', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                  <div style={{ width: 56, height: 56, borderRadius: 'var(--radius-sm)', overflow: 'hidden', flexShrink: 0, background: 'linear-gradient(135deg, var(--peach-light), var(--cream))' }}>
+                <article className="card" style={{ padding: '16px', display: 'grid', gridTemplateColumns: '72px minmax(0,1fr) 20px', gap: 14, alignItems: 'center' }}>
+                  <div style={{ width: 72, height: 72, borderRadius: 'var(--radius-md)', overflow: 'hidden', background: 'linear-gradient(135deg, var(--peach-light), var(--cream))' }}>
                     <img src="/assets/hero-hub.png" alt="trip" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                      <span style={{
-                        width: 6, height: 6, borderRadius: '50%',
-                        background: statusColors[trip.status], display: 'inline-block',
-                      }} className={trip.status === 'active' ? 'animate-heartbeat' : ''} />
-                      <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: statusColors[trip.status], letterSpacing: '0.05em' }}>
-                        {trip.status === 'active' ? 'ĐANG DIỄN RA' : trip.status === 'upcoming' ? 'SẮP TỚI' : 'ĐÃ QUA'}
-                      </span>
-                    </div>
+                    <span style={{ display: 'inline-flex', marginBottom: 7, padding: '3px 8px', borderRadius: 999, background: STATUS_META[trip.status]?.background, color: STATUS_META[trip.status]?.color, fontSize: '.66rem', fontWeight: 800 }}>{STATUS_META[trip.status]?.label}</span>
                     <h3 style={{
-                      fontSize: '1rem', fontWeight: 600, color: 'var(--navy)', marginBottom: 4,
-                      lineHeight: 1.3, overflow: 'hidden',
-                      textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      fontSize: '1rem', fontWeight: 750, color: 'var(--navy)', marginBottom: 6,
+                      lineHeight: 1.35, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
                     }}>{trip.title}</h3>
-                    <div style={{ display: 'flex', gap: 10, fontSize: '0.75rem', color: 'var(--navy-muted)' }}>
-                      <span>📅 {trip.duration} ngày</span>
-                      <span>· {trip.companion}</span>
-                      {trip.total_cost_estimate && <span>· {trip.total_cost_estimate}</span>}
-                    </div>
-                    {trip.ai_match_score && (
-                      <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <div style={{ height: 3, borderRadius: 2, background: 'rgba(26,29,59,0.08)', flex: 1, overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${trip.ai_match_score}%`, background: 'linear-gradient(135deg, var(--coral), var(--warm-orange))', borderRadius: 2 }} />
-                        </div>
-                        <span style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--coral)' }}>{trip.ai_match_score}% AI match</span>
-                      </div>
-                    )}
+                    <p style={{ margin: 0, fontSize: '.75rem', color: 'var(--navy-muted)', lineHeight: 1.5 }}>{trip.duration} ngày · {COMPANION_LABELS[trip.companion] || trip.companion}{trip.start_date ? ` · ${new Date(`${trip.start_date}T00:00:00`).toLocaleDateString('vi-VN')}` : ''}</p>
+                    {trip.total_cost_estimate && <p style={{ margin: '3px 0 0', fontSize: '.75rem', fontWeight: 700, color: 'var(--coral)' }}>Dự kiến {trip.total_cost_estimate}</p>}
                   </div>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--gray-soft)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 2 }}>
                     <path d="M9 18l6-6-6-6"/>
                   </svg>
-                </div>
+                </article>
               </Link>
             ))}
           </div>

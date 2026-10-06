@@ -1,14 +1,17 @@
 import { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
+import { requireAdmin } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
   try {
+    const admin = requireAdmin(req);
+    if (admin instanceof Response) return admin;
     const db = getDb();
     const { searchParams } = new URL(req.url);
     const source = searchParams.get('source');
 
     let query = 'SELECT * FROM training_examples';
-    let params: any[] = [];
+    const params: any[] = [];
 
     if (source && source !== 'all') {
       query += ' WHERE source = ?';
@@ -27,6 +30,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const admin = requireAdmin(req);
+    if (admin instanceof Response) return admin;
     const db = getDb();
     const data = await req.json();
 

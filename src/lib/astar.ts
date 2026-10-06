@@ -1,5 +1,7 @@
 import { getDb } from './db';
-const SPEED = 25; // km/h nội thành Huế
+import { normalizePlaceCategory } from './place-taxonomy';
+import { bangkokNow, isOpenAt, parseOpeningHours } from './opening-hours';
+import { estimateTravelMinutes } from './travel-time';
 const START_H = 7;
 const BUDGET = 840; // 14h: 07:00→21:00
 const MAX_H = 2; // max heritage/day
@@ -10,7 +12,7 @@ function dkm(a1:number,o1:number,a2:number,o2:number){
   const x=Math.sin(d1/2)**2+Math.cos(a1*Math.PI/180)*Math.cos(a2*Math.PI/180)*Math.sin(d2/2)**2;
   return 6371*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));
 }
-function tm(km:number){return(km/SPEED)*60;}
+function tm(km:number){return estimateTravelMinutes(km);}
 function ft(m:number){const t=START_H*60+Math.floor(m);return`${(Math.floor(t/60)%24+'').padStart(2,'0')}:${(t%60+'').padStart(2,'0')}`;}
 
 type SN='BREAKFAST'|'MORNING'|'CAFE_BREAK'|'LUNCH'|'SIESTA'|'AFTERNOON'|'LATE_AFT'|'DINNER'|'EVENING';
@@ -81,46 +83,69 @@ function sc(p:any,n:Nd,arr:number,tt:number):number{
   if(sl.name==='SIESTA'&&HV.has(p.category)&&!p.indoor)s-=1000;
   if(n.lc===p.category&&!FC.has(p.category))s-=500;
   if(HC.has(p.category)&&HC.has(n.lc))s-=800;
+  const categoryCount=n.path.filter(activity=>activity.type===p.category).length;
+  if(p.category==='cafe'&&categoryCount>=2)s-=2200;
+  if(FC.has(p.category)&&n.path.filter(activity=>FC.has(activity.type)).length>=3)s-=2200;
   if(tt>40)s-=400;if(tt>60)s-=800;
   s+=(p.popularity||0.5)*100+(p.rating||4)*20;
   return s;
 }
 
-export function generateAstarTrip({duration,styles,companion,budget,food,startLat,startLng}:{
+export function generateAstarTrip({duration,styles,companion,budget,startLat,startLng,startDate,pacing='balanced',visitedPlaceIds=[],avoidPlaceIds=[]}:{
   duration:number;styles:string|string[];companion:string;budget:number;food?:string[];startLat?:number;startLng?:number;
+  startDate?:string;pacing?:string;
+  visitedPlaceIds?:string[];avoidPlaceIds?:string[];
 }){
   const db=getDb();
-  const allP=db.prepare("SELECT *,meal_type FROM places WHERE lat IS NOT NULL AND lng IS NOT NULL AND CAST(lat AS REAL)>15 AND CAST(lat AS REAL)<17").all() as any[];
-  const sArr=Array.isArray(styles)?styles:[styles].filter(Boolean);
+  const allP=db.prepare("SELECT *,meal_type FROM places WHERE publication_status = 'published' AND lat IS NOT NULL AND lng IS NOT NULL AND CAST(lat AS REAL)>15 AND CAST(lat AS REAL)<17").all() as any[];
+  const rawStyles=Array.isArray(styles)?styles:[styles].filter(Boolean);
+  const sArr=rawStyles.map((style:string)=>{
+    const text=style.toLowerCase();
+    if(text.includes('ẩm thực'))return'food'; if(text.includes('cà phê')||text.includes('trà'))return'cafe';
+    if(text.includes('di sản')||text.includes('triều'))return'heritage'; if(text.includes('chùa')||text.includes('tâm linh'))return'temple';
+    if(text.includes('thiên nhiên')||text.includes('sông'))return'nature'; if(text.includes('nghệ thuật')||text.includes('nhã nhạc'))return'art';
+    if(text.includes('thủ công')||text.includes('làng nghề'))return'craft_village'; return normalizePlaceCategory(style)||style;
+  });
   allP.forEach(p=>{
+    p.category=normalizePlaceCategory(p.category)||p.category;
     p.base_score=(p.popularity||0.5)*80+(p.rating||4)*15;
+    p.base_score+=p.verification_status==='verified'?60:p.verification_status==='reviewed'?20:-30;
     if(sArr.some(s=>s===p.category))p.base_score+=50;
+    if(visitedPlaceIds.includes(p.id))p.base_score-=120;
+    if(avoidPlaceIds.includes(p.id))p.base_score-=1000;
     p.avg_visit_min=Number(p.avg_visit_min)||60;
+    if(['food','cafe','market'].includes(p.category))p.avg_visit_min=Math.min(p.avg_visit_min,60);
     p.meal_type=p.meal_type||(FC.has(p.category)?'any':null);
     p.indoor=Number(p.indoor)||0;
     p.lat=Number(p.lat);p.lng=Number(p.lng);
   });
-  const dur=Number(duration)||2;
+  const dur=Math.min(7,Math.max(1,parseInt(String(duration),10)||2));
+  const maxActivities=pacing==='relaxed'?6:pacing==='packed'?8:7;
   const days:any[]=[],hl:string[]=[],gv=new Set<string>();
   let aLat=(startLat&&startLat>15&&startLat<17)?startLat:16.4637;
   let aLng=(startLng&&startLng>106&&startLng<109)?startLng:107.5909;
 
   for(let d=0;d<dur;d++){
+    const scheduleDate=startDate?new Date(`${startDate}T12:00:00+07:00`):new Date();scheduleDate.setDate(scheduleDate.getDate()+d);
+    const scheduleDay=bangkokNow(scheduleDate).day;
     const pq=new PQ<Nd>((a,b)=>b.sc-a.sc);
     pq.push({lat:aLat,lng:aLng,vis:new Set(gv),path:[],g:0,sc:0,hc:0,meals:{b:false,l:false,d:false},lc:''});
     let best:any[]=[],bestSc=-Infinity,st=0;
 
     while(!pq.empty&&st<MAX_ST){
       const n=pq.pop()!;st++;
-      if(n.g>=BUDGET-30||n.path.length>=9){if(n.sc>bestSc){bestSc=n.sc;best=n.path;}continue;}
+      if(n.g>=BUDGET-30||n.path.length>=maxActivities){if(n.sc>bestSc){bestSc=n.sc;best=n.path;}continue;}
       if(n.path.length>=4&&n.sc>bestSc){bestSc=n.sc;best=n.path;}
       const cands=allP.filter(p=>!n.vis.has(p.id)&&dkm(n.lat,n.lng,p.lat,p.lng)<15);
       const scored=cands.map(p=>{
         const k=dkm(n.lat,n.lng,p.lat,p.lng),tt=tm(k),arr=n.g+tt;
-        return{p,tt,arr,s:sc(p,n,arr,tt)};
+        const hours=parseOpeningHours(p.opening_hours,p.hours_time);
+        const hasHours=Object.values(hours).some(intervals=>intervals.length>0);
+        const openScore=hasHours&&!isOpenAt(hours,scheduleDay,ft(arr))?-3000:0;
+        return{p,tt,arr,s:sc(p,n,arr,tt)+openScore};
       }).sort((a,b)=>b.s-a.s).slice(0,6);
 
-      for(const{p:pl,tt,arr,s}of scored){
+      for(const{p:pl,arr,s}of scored){
         const leave=arr+pl.avg_visit_min;
         if(leave>BUDGET+20||s<-1000)continue;
         const sl=slot(arr);const sn:SN=sl?.name||'EVENING';
@@ -152,15 +177,20 @@ export function generateAstarTrip({duration,styles,companion,budget,food,startLa
         }
       }
     }
-    for(const a of best){if(a.place_id)gv.add(a.place_id);if(HC.has(a.type)&&!hl.includes(a.name))hl.push(a.name);}
+    // Attractions should not repeat across days, while restaurants and cafés may
+    // legitimately reappear on longer trips when the verified catalogue is small.
+    for(const a of best){if(a.place_id&&!FC.has(a.type))gv.add(a.place_id);if(HC.has(a.type)&&!hl.includes(a.name))hl.push(a.name);}
     if(best.length>0){const l=best[best.length-1];aLat=l.lat;aLng=l.lng;}
     const t=gtheme(fa,d);
     days.push({day:d+1,theme:t.theme,day_tip:t.tip,activities:fa});
   }
 
   const CL:Record<string,string>={solo:'một mình',couple:'cặp đôi',family:'gia đình',friends:'nhóm bạn'};
+  const STYLE_LABELS:Record<string,string>={heritage:'Di sản',temple:'Chùa & tâm linh',nature:'Thiên nhiên',food:'Ẩm thực',cafe:'Cà phê',craft_village:'Làng nghề',art:'Nghệ thuật'};
+  const titleThemes=Array.from(new Set(sArr.filter(style=>allP.some(place=>place.category===style)).map(style=>STYLE_LABELS[style]).filter(Boolean))).slice(0,2);
+  const tripTitle=`Huế ${dur} ngày · ${titleThemes.length ? titleThemes.join(' & ') : (days[0]?.theme || 'Khám phá Cố đô')}`;
   return{
-    title:`Huế ${dur} ngày — Như có hướng dẫn viên riêng`,
+    title:tripTitle,
     summary:`Lịch trình ${dur} ngày cho ${CL[companion]||companion} — nhịp ngày thực tế: ăn sáng → di tích → nghỉ trưa → khám phá chiều → ẩm thực tối. Tối đa ${MAX_H} di tích/ngày.`,
     total_cost_estimate:budget?`${Number(budget).toLocaleString('vi-VN')} VNĐ`:'Dự kiến 2.000.000 VNĐ',
     highlights:hl.slice(0,5),

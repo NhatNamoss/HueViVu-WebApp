@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { authenticatedHeaders } from '@/lib/client-auth';
 
 const THEME_LABELS: Record<string, string> = {
   classic: '🏛️ Cổ điển', food: '🍜 Ẩm thực', nature: '🌿 Thiên nhiên',
@@ -16,17 +17,20 @@ export default function AdminToursPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Xóa combo tour này?')) return;
-    await fetch(`/api/tours/${id}`, { method: 'DELETE' });
+    const response = await fetch(`/api/tours/${id}`, { method: 'DELETE', headers: authenticatedHeaders() });
+    if (!response.ok) return alert('Không có quyền hoặc không thể xóa tour.');
     setTours(prev => prev.filter(t => t.id !== id));
   };
 
   const toggleFeatured = async (tour: any) => {
-    await fetch(`/api/tours/${tour.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...tour, is_featured: !tour.is_featured }) });
+    const response = await fetch(`/api/tours/${tour.id}`, { method: 'PUT', headers: authenticatedHeaders(true), body: JSON.stringify({ ...tour, is_featured: !tour.is_featured }) });
+    if (!response.ok) return alert('Không có quyền hoặc không thể cập nhật tour.');
     setTours(prev => prev.map(t => t.id === tour.id ? { ...t, is_featured: !t.is_featured } : t));
   };
 
   const toggleActive = async (tour: any) => {
-    await fetch(`/api/tours/${tour.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...tour, is_active: !tour.is_active }) });
+    const response = await fetch(`/api/tours/${tour.id}`, { method: 'PUT', headers: authenticatedHeaders(true), body: JSON.stringify({ ...tour, is_active: !tour.is_active }) });
+    if (!response.ok) return alert('Không có quyền hoặc không thể cập nhật tour.');
     setTours(prev => prev.map(t => t.id === tour.id ? { ...t, is_active: !t.is_active } : t));
   };
 

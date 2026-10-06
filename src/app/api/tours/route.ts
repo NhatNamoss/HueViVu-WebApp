@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
 import { v4 as uuidv4 } from 'uuid';
+import { requireAdmin } from '@/lib/auth';
 
 const JSON_FIELDS = ['gallery', 'place_ids', 'highlights', 'includes', 'excludes', 'tags'];
 
@@ -18,6 +19,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const admin = requireAdmin(req);
+    if (admin instanceof Response) return admin;
     const db = getDb();
     const d = await req.json();
     const id = 'tour_' + uuidv4().replace(/-/g, '').slice(0, 12);

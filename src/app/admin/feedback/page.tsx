@@ -1,12 +1,13 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { authenticatedHeaders } from '@/lib/client-auth';
 
 export default function AdminFeedbackPage() {
   const [feedbacks, setFeedbacks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/feedback')
+    fetch('/api/feedback', { headers: authenticatedHeaders() })
       .then(res => res.json())
       .then(data => {
         setFeedbacks(data.feedback || []);

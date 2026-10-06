@@ -1,10 +1,10 @@
 ﻿'use client';
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import PlaceCard from '@/components/ui/PlaceCard';
 import CategoryFilter from '@/components/ui/CategoryFilter';
 import WeatherWidget from '@/components/ui/WeatherWidget';
+import ExploreMap from '@/components/ExploreMap';
 
 type Place = {
   id: string; name: string; category: string; description: string;
@@ -75,6 +75,10 @@ function ExploreInner() {
   const [weather, setWeather] = useState<any>(null);
   const [aiResponse, setAiResponse] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [mapExpanded, setMapExpanded] = useState(false);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [onlyOpen, setOnlyOpen] = useState(false);
 
   // Read URL params on mount: ?cat=cafe or ?time=morning
   useEffect(() => {
@@ -127,9 +131,14 @@ function ExploreInner() {
     fetch('/api/places?' + params).then(r => r.json()).then(data => { setPlaces(data); setLoading(false); });
   }, [category, q]);
 
-  const categoryEmoji: Record<string, string> = {
-    heritage: '🏛️', food: '🍜', nature: '🌿', temple: '🛕', cafe: '☕', market: '🛍️', craft_village: '🎨',
+  const locateMe = () => {
+    navigator.geolocation?.getCurrentPosition(
+      position => { setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude }); setMapExpanded(true); },
+      () => setAiResponse('Không lấy được vị trí. Bạn vẫn có thể dùng bản đồ và chọn điểm thủ công.'),
+      { enableHighAccuracy: true, maximumAge: 30_000 },
+    );
   };
+  const visiblePlaces = onlyOpen ? places.filter(place => ['open', 'closing_soon'].includes((place as any).opening_status?.status)) : places;
 
   return (
     <>
@@ -141,7 +150,7 @@ function ExploreInner() {
             Hôm nay muốn <em style={{ color: 'var(--coral)' }}>cảm nhận</em> gì?
           </h1>
         </div>
-        <button className="header-btn" aria-label="Map view">
+        <button className="header-btn" aria-label="Map view" onClick={() => setMapExpanded(value => !value)}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
             <line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>
@@ -213,28 +222,18 @@ function ExploreInner() {
         onChange={setCategory} 
         style={{ marginBottom: 16 }} 
       />
+      <div style={{ padding: '0 20px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <button onClick={() => setOnlyOpen(value => !value)} className={`mood-chip${onlyOpen ? ' active' : ''}`}>🟢 Đang mở</button>
+        {onlyOpen && <span style={{ fontSize: '.75rem', color: 'var(--navy-muted)' }}>{visiblePlaces.length} nơi đang mở</span>}
+      </div>
 
-      {/* Map Preview (decorative) */}
+      {/* Live map */}
       <section className="section">
-        <div style={{ height: 140, borderRadius: 'var(--radius-lg)', overflow: 'hidden', position: 'relative', background: 'linear-gradient(135deg, #d4e8c2 0%, #a8d4a8 30%, #7fc4c4 60%, #4aa8c8 100%)' }}>
-          {/* Decorative map pins */}
-          {[
-            { left: '25%', top: '40%', label: '🏛️', name: 'Hoàng Thành' },
-            { left: '60%', top: '20%', label: '🛕', name: 'Thiên Mụ' },
-            { left: '45%', top: '60%', label: '🛍️', name: 'Đông Ba' },
-            { left: '15%', top: '65%', label: '🌊', name: 'Sông Hương' },
-            { left: '75%', top: '55%', label: '🏛️', name: 'Lăng Tự Đức' },
-          ].map(pin => (
-            <div key={pin.name} style={{ position: 'absolute', left: pin.left, top: pin.top, transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-              <div style={{ width: 32, height: 32, background: 'white', borderRadius: '50% 50% 50% 0', transform: 'rotate(-45deg)', boxShadow: '0 2px 8px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ transform: 'rotate(45deg)', fontSize: '0.875rem' }}>{pin.label}</span>
-              </div>
-              <p style={{ fontSize: '0.5625rem', fontWeight: 600, color: 'var(--navy)', background: 'rgba(255,255,255,0.9)', padding: '1px 4px', borderRadius: 4, marginTop: 2, whiteSpace: 'nowrap' }}>{pin.name}</p>
-            </div>
-          ))}
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 60%, rgba(255,249,247,0.8) 100%)', pointerEvents: 'none' }} />
-          <div style={{ position: 'absolute', bottom: 12, right: 12, background: 'white', borderRadius: 'var(--radius-sm)', padding: '6px 12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--navy)', boxShadow: 'var(--shadow-sm)' }}>
-            📍 Huế, Việt Nam
+        <div style={{ height: mapExpanded ? 420 : 220, borderRadius: 'var(--radius-lg)', overflow: 'hidden', position: 'relative', boxShadow: 'var(--shadow-md)', transition: 'height .3s var(--ease-out)' }}>
+          <ExploreMap places={visiblePlaces} selectedId={selectedPlaceId} onSelect={setSelectedPlaceId} userLocation={userLocation} />
+          <div style={{ position: 'absolute', zIndex: 500, left: 12, bottom: 12, display: 'flex', gap: 8 }}>
+            <button onClick={locateMe} style={{ border: 'none', background: 'white', borderRadius: 'var(--radius-full)', padding: '8px 12px', boxShadow: 'var(--shadow-md)', fontWeight: 700, color: 'var(--navy)', cursor: 'pointer' }}>◎ Vị trí của tôi</button>
+            <button onClick={() => setMapExpanded(value => !value)} style={{ border: 'none', background: 'white', borderRadius: 'var(--radius-full)', padding: '8px 12px', boxShadow: 'var(--shadow-md)', fontWeight: 700, color: 'var(--navy)', cursor: 'pointer' }}>{mapExpanded ? 'Thu gọn' : 'Mở rộng'}</button>
           </div>
         </div>
       </section>
@@ -245,7 +244,7 @@ function ExploreInner() {
           <h2 className="section-title">
             {category === 'all' ? '✨ Tất cả địa điểm' : CATEGORIES.find(c => c.key === category)?.label ?? '🌟 Địa điểm'}
           </h2>
-          <span style={{ fontSize: '0.8125rem', color: 'var(--navy-muted)' }}>{places.length} nơi</span>
+          <span style={{ fontSize: '0.8125rem', color: 'var(--navy-muted)' }}>{visiblePlaces.length} nơi</span>
         </div>
 
         {loading ? (
@@ -256,10 +255,10 @@ function ExploreInner() {
           </div>
         ) : (
           <div className="places-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {places.map(place => (
+            {visiblePlaces.map(place => (
               <PlaceCard key={place.id} place={place} layout="grid" />
             ))}
-            {places.length === 0 && (
+            {visiblePlaces.length === 0 && (
               <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '48px 20px', color: 'var(--navy-muted)' }}>
                 <p className="animate-float" style={{ fontSize: '2.5rem', marginBottom: 12 }}>🔍</p>
                 <h3 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--navy)', marginBottom: 6 }}>

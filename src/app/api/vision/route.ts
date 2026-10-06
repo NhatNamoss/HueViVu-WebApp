@@ -1,57 +1,86 @@
 import { NextRequest } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { getDb } from '@/lib/db';
+import { parsePlaceRow } from '@/lib/place-data';
 
-// Initialize Gemini with the API key from environment variable
-// We fall back to a dummy key to prevent crash if not set, but it will fail on actual fetch.
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || 'MISSING_API_KEY');
+
+function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
+  const rad = (value: number) => value * Math.PI / 180;
+  const dLat = rad(lat2 - lat1); const dLng = rad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function nearbyPlaces(lat?: number, lng?: number) {
+  const db = getDb();
+  const rows = db.prepare(`SELECT * FROM places
+    WHERE publication_status = 'published' AND lat IS NOT NULL AND lng IS NOT NULL
+    ORDER BY CASE verification_status WHEN 'verified' THEN 0 WHEN 'reviewed' THEN 1 ELSE 2 END, popularity DESC
+    LIMIT 80`).all() as any[];
+  const parsed: any[] = rows.map(parsePlaceRow);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return parsed.slice(0, 5);
+  return parsed.map(place => ({ ...place, distance_km: distanceKm(lat!, lng!, Number(place.lat), Number(place.lng)) }))
+    .sort((a, b) => a.distance_km - b.distance_km).slice(0, 5);
+}
+
+function fallbackReply(mode: string, places: any[], prompt: string) {
+  const place = places[0];
+  if (!place) return 'Mình chưa có dữ liệu đã kiểm chứng đủ gần vị trí này. Bạn có thể chụp rõ bảng tên hoặc mô tả điều đang nhìn thấy.';
+  if (mode === 'practical') return `${place.name}: ${place.hours || 'giờ mở cửa chưa được xác minh'}; ${place.price || 'giá chưa cập nhật'}. ${place.tips?.[0] || place.ai_insight || 'Hãy kiểm tra thông tin tại quầy trước khi vào.'}`;
+  if (mode === 'next') return `Điểm phù hợp gần bạn là ${place.name}${place.distance_km != null ? `, cách khoảng ${place.distance_km.toFixed(1)} km` : ''}. ${place.ai_insight || place.description || ''}`;
+  if (mode === 'story') return `${place.name}. ${place.description || place.ai_insight || 'Dữ liệu kể chuyện đang được người kiểm chứng bổ sung.'}`;
+  return `Khung hình có thể liên quan đến ${place.name}. ${place.ai_insight || place.description || `Câu hỏi của bạn: ${prompt}`}`;
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const { image, prompt } = await req.json();
+    const { image, prompt = 'Đây là gì?', mode = 'identify', lat, lng, weather, tripContext } = await req.json();
+    if (!image) return Response.json({ error: 'Thiếu hình ảnh từ camera' }, { status: 400 });
 
-    if (!image) {
-      return Response.json({ error: 'Thiếu hình ảnh từ camera' }, { status: 400 });
-    }
+    const places = nearbyPlaces(Number(lat), Number(lng));
+    const publicPlaces = places.map(place => ({
+      id: place.id, name: place.name, category: place.category, address: place.address,
+      distance_km: place.distance_km, hours: place.hours, price: place.price,
+      verified: place.verification_status === 'verified',
+    }));
+    const suggestions = ['Đây là công trình gì?', 'Kể tôi một câu chuyện ngắn', 'Có mẹo tham quan nào?', 'Tiếp theo nên đi đâu?'];
 
     if (!process.env.GEMINI_API_KEY) {
-      return Response.json({ 
-        reply: "Dạ, hiện tại hệ thống chưa được cấu hình API Key của Google Gemini. Xin vui lòng thêm GEMINI_API_KEY vào file .env.local để tôi có thể nhìn thấy nhé."
-      });
+      return Response.json({ reply: fallbackReply(mode, places, prompt), nearby: publicPlaces, suggestions, source: 'verified-data-fallback' });
     }
 
-    // Strip the "data:image/jpeg;base64," part
-    const base64Data = image.split(',')[1] || image;
+    const knowledge = places.map((place, index) => {
+      const verified = place.verification_status === 'verified' ? 'ĐÃ XÁC MINH' : 'CHƯA XÁC MINH ĐỦ';
+      return `${index + 1}. ${place.name} [${verified}]${place.distance_km != null ? ` — ${place.distance_km.toFixed(2)} km` : ''}\nĐịa chỉ: ${place.address || 'chưa có'}\nGiờ: ${place.hours || place.hours_time || 'chưa xác minh'}\nGiá: ${place.price || 'chưa xác minh'}\nMô tả: ${place.description || ''}\nInsight: ${place.ai_insight || ''}\nMẹo: ${(place.tips || []).join('; ')}`;
+    }).join('\n\n');
 
-    // Use Gemini 3.6 Flash
-    const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
+    const modeInstruction: Record<string, string> = {
+      identify: 'Nhận diện thứ nổi bật trong ảnh. Nếu không chắc, nói rõ mức độ chắc chắn và hỏi người dùng chụp bảng tên.',
+      story: 'Kể một câu chuyện lịch sử-văn hóa hấp dẫn trong 80-120 từ, chỉ dùng sự kiện chắc chắn.',
+      practical: 'Ưu tiên giờ mở cửa, giá, lối vào, trang phục, thời tiết và mẹo thực tế.',
+      next: 'Đề xuất bước tiếp theo dựa trên vị trí, thời tiết và hành trình hiện tại.',
+    };
+    const systemInstruction = `Bạn là HueViVu Live Guide, hướng dẫn viên Huế tại chỗ.
+${modeInstruction[mode] || modeInstruction.identify}
+Chỉ khẳng định dữ kiện có trong DỮ LIỆU ĐÃ KIỂM CHỨNG bên dưới hoặc nhìn thấy rõ trong ảnh. Không bịa tên công trình, niên đại, giá hay giờ mở cửa. Nếu dữ liệu chưa xác minh, nói thẳng. Trả lời tiếng Việt tự nhiên, tối đa 130 từ, mở đầu bằng kết luận hữu ích nhất.
 
-    // Knowledge Base Prompt (Mocking pre-trained data as requested by the user)
-    const systemInstruction = `
-Bạn là một Hướng dẫn viên du lịch ảo thông minh của hệ thống HueViVu Live. 
-Người dùng sẽ đưa camera vào một đồ vật và hỏi bạn qua giọng nói.
-Nhiệm vụ của bạn là nhận diện vật thể và trả lời thật tự nhiên, lôi cuốn, súc tích (dưới 50 chữ).
-Dữ liệu đặc biệt (Knowledge Base): 
-Nếu người dùng giơ lên một CHÚA CỐC (hoặc cái ly) bất kỳ, bạn PHẢI nhận diện đó là: "Cốc Harry Potter phiên bản Cố đô". Và bạn sẽ mô tả: "Đây là chiếc cốc Harry Potter, ra đời vào năm 1997 cùng với cuốn sách đầu tiên. Điều đặc biệt là chiếc cốc này có in hình rồng thời Nguyễn, một phiên bản giới hạn kết hợp giữa phép thuật Hogwarts và di sản Huế."
-Nếu là các vật thể khác, hãy mô tả ngắn gọn và gắn một chút vibe Huế nếu có thể.
-`;
+Vị trí/thời tiết: ${weather || 'chưa có'}
+Hành trình hiện tại: ${tripContext || 'chưa có'}
 
-    const chatResult = await model.generateContent([
+DỮ LIỆU GẦN NGƯỜI DÙNG:
+${knowledge || 'Chưa có địa điểm gần vị trí này.'}`;
+
+    const base64Data = String(image).split(',')[1] || image;
+    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_VISION_MODEL || 'gemini-2.0-flash' });
+    const result = await model.generateContent([
       systemInstruction,
-      prompt,
-      {
-        inlineData: {
-          data: base64Data,
-          mimeType: "image/jpeg"
-        }
-      }
+      `Câu hỏi của khách: ${prompt}`,
+      { inlineData: { data: base64Data, mimeType: 'image/jpeg' } },
     ]);
-
-    const reply = chatResult.response.text();
-
-    return Response.json({ reply });
-
+    return Response.json({ reply: result.response.text(), nearby: publicPlaces, suggestions, source: 'vision-grounded' });
   } catch (error: any) {
-    console.error('[Vision API Error]:', error);
-    return Response.json({ error: 'Lỗi trong quá trình xử lý hình ảnh qua Gemini API: ' + error.message }, { status: 500 });
+    console.error('[Vision API Error]', error);
+    return Response.json({ error: 'Live Guide chưa xử lý được ảnh: ' + error.message }, { status: 500 });
   }
 }

@@ -148,7 +148,7 @@ function nearestOf(cluster: any[], pool: any[]): any | null {
 }
 
 // ── Local Fallback Trip Generator ────────────────────────────────────────────
-function generateLocalFallbackTrip({ duration, styles, companion, budget, food }: {
+function generateLocalFallbackTrip({ duration, budget }: {
   duration: number; styles: string | string[];
   companion: string; budget: number; food?: string[];
 }): any {
@@ -303,7 +303,7 @@ export async function chat(messages: any[], tripContext?: any): Promise<string> 
   const lastUser = messages[messages.length - 1]?.content || '';
 
   const db = getDb();
-  const dbPlaces = db.prepare("SELECT name, category, price, address FROM places").all() as any[];
+  const dbPlaces = db.prepare("SELECT name, category, price, address FROM places WHERE publication_status = 'published'").all() as any[];
   const placesContext = dbPlaces.map(p => `- ${p.name} (Loại: ${p.category}, Giá: ${p.price || 'Miễn phí'}) - ${p.address || 'Huế'}`).join('\n');
 
   let rules = '';

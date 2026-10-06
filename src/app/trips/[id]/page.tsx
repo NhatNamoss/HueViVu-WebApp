@@ -3,11 +3,14 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import CinematicMap from '@/components/CinematicMap';
+import { trackEvent } from '@/lib/analytics';
+import FeasibilityAssistant from '@/components/trip/FeasibilityAssistant';
 
 type Activity = {
   time: string; name: string; type: string;
   duration: string; cost: string; description: string;
   ai_tip: string; location: string; lat?: number; lng?: number;
+  place_id?: string;
 };
 type Day = { day: number; theme: string; day_tip: string; activities: Activity[] };
 type Trip = {
@@ -41,7 +44,8 @@ const PACKING = [
   'Áo khoác mỏng (buổi tối Huế se lạnh)',
 ];
 const TIMES = ['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00'];
-type ChatMsg = { role: 'user' | 'assistant'; content: string };
+type ChatProposal = { instruction: string; itinerary: any; summary: string[] };
+type ChatMsg = { role: 'user' | 'assistant'; content: string; proposal?: ChatProposal; applied?: boolean };
 
 // Haversine distance (km)
 function haversine(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -122,9 +126,20 @@ export default function TripDetailPage() {
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [customizeText, setCustomizeText] = useState('');
   const [customizing, setCustomizing] = useState(false);
+  const [adaptOpen, setAdaptOpen] = useState(false);
+  const [adapting, setAdapting] = useState(false);
+  const [adaptError, setAdaptError] = useState('');
+  const [delayMinutes, setDelayMinutes] = useState(45);
+  const [feasibility, setFeasibility] = useState<any | null>(null);
+  const [showFeasibility, setShowFeasibility] = useState(false);
+  const [optimizingFeasibility, setOptimizingFeasibility] = useState(false);
+  const [previewingFeasibility, setPreviewingFeasibility] = useState(false);
+  const [optimizationPreview, setOptimizationPreview] = useState<any | null>(null);
   const [shareSuccess, setShareSuccess] = useState(false);
   const [showEmergency, setShowEmergency] = useState(false);
   const [showPacking, setShowPacking] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [overviewOpen, setOverviewOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [weather, setWeather] = useState<Weather | null>(null);
   const [weatherDismissed, setWeatherDismissed] = useState(false);
@@ -144,6 +159,9 @@ export default function TripDetailPage() {
   const [placeResults, setPlaceResults] = useState<any[]>([]);
   const [placeSelected, setPlaceSelected] = useState<any | null>(null);
   const [placeTime, setPlaceTime] = useState('10:00');
+  const [smartPlacement, setSmartPlacement] = useState(true);
+  const [placeSuggestion, setPlaceSuggestion] = useState<any | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [placeAdding, setPlaceAdding] = useState(false);
   const [placeOk, setPlaceOk] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -164,9 +182,15 @@ export default function TripDetailPage() {
           advisory_type: d.advisory_type || 'good', forecast: d.forecast,
         });
       }).catch(() => {});
-  }, [params.id]);
+  }, [params.id, token]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
+
+  useEffect(() => {
+    if (!trip?.itinerary) return;
+    fetch(`/api/trips/${params.id}/validate`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then(response => response.ok ? response.json() : null).then(setFeasibility).catch(() => {});
+  }, [trip?.itinerary, params.id, token]);
 
   // ── Realtime GPS tracking ──
   useEffect(() => {
@@ -233,11 +257,6 @@ export default function TripDetailPage() {
 
   // ── Weather polling mỗi 30 phút + notification khi thay đổi ──
   useEffect(() => {
-    // Request notification permission
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-
     const prevWeatherRef = { key: '' };
     const pollWeather = () => {
       fetch('/api/weather').then(r => r.json()).then(d => {
@@ -277,11 +296,40 @@ export default function TripDetailPage() {
     finally { setSaving(false); }
   }, [params.id, token]);
 
-  const searchPlaces = useCallback(async (q: string) => {
-    if (!q.trim()) { setPlaceResults([]); return; }
-    const res = await fetch('/api/places?q=' + encodeURIComponent(q)).then(r => r.json()).catch(() => []);
-    setPlaceResults(Array.isArray(res) ? res.slice(0, 12) : []);
-  }, []);
+  const searchPlaces = useCallback(async (q = '', category = '') => {
+    const search = new URLSearchParams();
+    if (q.trim()) search.set('q', q.trim());
+    if (category) search.set('category', category);
+    const res = await fetch('/api/places?' + search.toString()).then(r => r.json()).catch(() => []);
+    if (!Array.isArray(res)) { setPlaceResults([]); return; }
+    const currentActivities = trip?.itinerary?.days?.[activeDay]?.activities || [];
+    const usedIds = new Set((trip?.itinerary?.days || []).flatMap(day => day.activities || []).map(activity => activity.place_id).filter(Boolean));
+    const ranked = res
+      .filter((place: any) => !usedIds.has(place.id))
+      .map((place: any) => {
+        const distances = currentActivities
+          .filter(activity => activity.lat && activity.lng && place.lat && place.lng)
+          .map(activity => haversine(Number(activity.lat), Number(activity.lng), Number(place.lat), Number(place.lng)));
+        return { ...place, route_distance_km: distances.length ? Math.min(...distances) : null };
+      })
+      .sort((a: any, b: any) => (a.route_distance_km ?? 999) - (b.route_distance_km ?? 999) || (b.rating || 0) - (a.rating || 0));
+    setPlaceResults(ranked.slice(0, 14));
+  }, [trip, activeDay]);
+
+  const selectPlace = async (place: any) => {
+    setPlaceSelected(place); setSmartPlacement(true); setPlaceSuggestion(null); setSuggestionLoading(true);
+    try {
+      const response = await fetch(`/api/trips/${params.id}/place-suggestion?dayIndex=${activeDay}&placeId=${encodeURIComponent(place.id)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const suggestion = await response.json();
+      setPlaceSuggestion(suggestion);
+      if (suggestion.feasible && suggestion.time) setPlaceTime(suggestion.time);
+    } catch {
+      setPlaceSuggestion({ feasible: false, reason: 'Chưa thể tính vị trí chèn. Bạn vẫn có thể tự chọn giờ.' });
+      setSmartPlacement(false);
+    } finally { setSuggestionLoading(false); }
+  };
 
   const busyAt = (time: string) => {
     const acts = trip?.itinerary?.days?.[activeDay]?.activities || [];
@@ -293,7 +341,7 @@ export default function TripDetailPage() {
   };
 
   const handleAddPlace = async () => {
-    if (!placeSelected || placeAdding || busyAt(placeTime)) return;
+    if (!placeSelected || placeAdding || (smartPlacement ? !placeSuggestion?.feasible : !!busyAt(placeTime))) return;
     setPlaceAdding(true);
     try {
       const res = await fetch('/api/trips/' + params.id + '/add-place', {
@@ -301,8 +349,10 @@ export default function TripDetailPage() {
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
         body: JSON.stringify({
           dayIndex: activeDay,
+          placeId: placeSelected.id,
+          smartInsert: smartPlacement,
           activity: {
-            time: placeTime,
+            time: smartPlacement ? placeSuggestion?.time : placeTime,
             name: placeSelected.name,
             type: placeSelected.category || 'heritage',
             duration: placeSelected.duration || '1 giờ',
@@ -319,7 +369,7 @@ export default function TripDetailPage() {
       if (res.ok && data.success) {
         setTrip(prev => prev ? { ...prev, itinerary: data.trip.itinerary ? JSON.parse(typeof data.trip.itinerary === 'string' ? data.trip.itinerary : JSON.stringify(data.trip.itinerary)) : prev.itinerary } : null);
         setPlaceOk(true);
-        setTimeout(() => { setPlaceSearchOpen(false); setPlaceOk(false); setPlaceSelected(null); setPlaceQuery(''); setPlaceResults([]); }, 1800);
+        setTimeout(() => { setPlaceSearchOpen(false); setPlaceOk(false); setPlaceSelected(null); setPlaceSuggestion(null); setPlaceQuery(''); setPlaceResults([]); }, 1800);
       } else {
         alert(data.error || 'Lỗi thêm địa điểm');
       }
@@ -383,10 +433,38 @@ export default function TripDetailPage() {
         body: JSON.stringify({ message: msg, tripId: params.id, history: newMsgs.slice(-10) }),
       });
       const data = await res.json();
-      setChatMessages(prev => [...prev, { role: 'assistant', content: data.reply || 'Xin lỗi, thử lại nhé!' }]);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: data.reply || 'Xin lỗi, thử lại nhé!', proposal: data.proposal || undefined }]);
     } catch {
       setChatMessages(prev => [...prev, { role: 'assistant', content: 'Đang gặp sự cố kết nối. Thử lại sau nhé!' }]);
     } finally { setChatLoading(false); }
+  };
+
+  const applyChatProposal = async (messageIndex: number, proposal: ChatProposal) => {
+    if (customizing) return;
+    setCustomizing(true);
+    try {
+      const response = await fetch('/api/trips/' + params.id + '/customize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+        body: JSON.stringify({ instruction: proposal.instruction, proposal: proposal.itinerary }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Không thể áp dụng thay đổi');
+      if (data.trip) {
+        setTrip(prev => prev ? {
+          ...prev, ...data.trip,
+          itinerary: data.trip.days ? { days: data.trip.days } : prev.itinerary,
+          highlights: data.trip.highlights || prev.highlights,
+          ai_insight: data.trip.ai_insight || prev.ai_insight,
+          total_cost_estimate: data.trip.total_cost_estimate || prev.total_cost_estimate,
+        } : null);
+        if (data.feasibility) setFeasibility(data.feasibility);
+        setChatMessages(prev => prev.map((item, index) => index === messageIndex ? { ...item, applied: true } : item));
+        setTourToast('✓ Đã áp dụng thay đổi từ trợ lý AI');
+      }
+    } catch (error: any) {
+      setChatMessages(prev => [...prev, { role: 'assistant', content: error.message || 'Không thể áp dụng thay đổi.' }]);
+    } finally { setCustomizing(false); }
   };
 
   const handleCustomize = async () => {
@@ -412,6 +490,62 @@ export default function TripDetailPage() {
       }
     } catch { alert('Đang gặp sự cố kết nối. Thử lại sau nhé!'); }
     finally { setCustomizing(false); }
+  };
+
+  const applyAdaptation = async (scenario: 'late' | 'rain' | 'hungry' | 'tired' | 'closed') => {
+    if (!trip || adapting) return;
+    if (scenario === 'closed' && activeActivity === null) {
+      setAdaptError('Hãy mở một hoạt động đang đóng cửa trước khi chọn phương án này.'); return;
+    }
+    setAdapting(true); setAdaptError('');
+    const now = new Date();
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    try {
+      const response = await fetch(`/api/trips/${params.id}/adapt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ scenario, dayIndex: activeDay, activityIndex: activeActivity, delayMinutes, currentTime, lat: userLocation?.lat, lng: userLocation?.lng }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Không thể điều chỉnh lịch trình');
+      setTrip(prev => prev ? { ...prev, itinerary: data.itinerary, ai_insight: `⚡ ${data.changes.join('. ')}` } : null);
+      setTourToast(`⚡ ${data.changes.join(' · ')}`); setAdaptOpen(false); setActiveActivity(null);
+      trackEvent('trip_adapted', { trip_id: String(params.id), metadata: { scenario, day: activeDay + 1, changes: data.changes } });
+    } catch (error: any) { setAdaptError(error.message); }
+    finally { setAdapting(false); }
+  };
+
+  const previewFeasibilityOptimization = async () => {
+    if (!trip || previewingFeasibility) return;
+    setPreviewingFeasibility(true);
+    try {
+      const response = await fetch(`/api/trips/${params.id}/optimize`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ preview: true }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Không thể tối ưu lịch trình');
+      setOptimizationPreview(data); setShowFeasibility(false);
+    } catch (error: any) { setTourToast(`⚠️ ${error.message}`); }
+    finally { setPreviewingFeasibility(false); }
+  };
+
+  const applyFeasibilityOptimization = async () => {
+    if (!trip || optimizingFeasibility) return;
+    setOptimizingFeasibility(true);
+    try {
+      const response = await fetch(`/api/trips/${params.id}/optimize`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ preview: false }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Không thể áp dụng phương án');
+      setTrip(prev => prev ? { ...prev, itinerary: data.itinerary, ai_insight: data.changes?.length ? `Đã tối ưu ${data.changes.length} thay đổi` : prev.ai_insight } : null);
+      setFeasibility(data.feasibility); setShowFeasibility(true); setOptimizationPreview(null);
+      setTourToast(data.changes?.length ? `✓ Đã tối ưu ${data.changes.length} thay đổi · Điểm mới ${data.feasibility.score}` : 'Lịch hiện tại chưa có thay đổi tự động phù hợp');
+      trackEvent('trip_feasibility_optimized', { trip_id: String(params.id), value: data.feasibility.score, metadata: { changes: data.changes, unresolved: data.unresolved } });
+    } catch (error: any) { setTourToast(`⚠️ ${error.message}`); }
+    finally { setOptimizingFeasibility(false); }
   };
 
   const handleShare = async () => {
@@ -478,22 +612,33 @@ export default function TripDetailPage() {
         </button>
       </div>
 
-      {/* Utility bar */}
-      <div style={{ display: 'flex', gap: 8, padding: '12px 20px', overflowX: 'auto' }}>
-        {([
-          { icon: '📋', label: copied ? '✓ Đã copy!' : 'Copy lịch trình', action: handleCopy },
-          { icon: '🧳', label: 'Chuẩn bị gì?', action: () => setShowPacking(true) },
-          { icon: '🚨', label: 'Khẩn cấp', action: () => setShowEmergency(true) },
-          { icon: '🤖', label: 'Tuỳ chỉnh AI', action: () => setCustomizeOpen(true) },
-        ] as { icon: string; label: string; action: () => void }[]).map(btn => (
-          <button key={btn.label} onClick={btn.action} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', background: 'white', border: '1px solid rgba(26,29,59,0.08)', borderRadius: 'var(--radius-full)', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: '0.78rem', fontWeight: 600, color: 'var(--navy)', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', whiteSpace: 'nowrap' }}>
-            <span>{btn.icon}</span>{btn.label}
-          </button>
-        ))}
+      {/* Primary actions: one clear editing path, one situational path, utilities on demand. */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr .85fr', gap: 8, padding: '12px 20px' }}>
+        <button onClick={() => setChatOpen(true)} style={{ padding: '10px 8px', border: 'none', borderRadius: 12, background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', color: 'white', fontWeight: 750, cursor: 'pointer' }}>🤖 Chỉnh bằng AI</button>
+        <button onClick={() => { setAdaptError(''); setAdaptOpen(true); }} style={{ padding: '10px 8px', border: '1px solid rgba(255,127,107,.22)', borderRadius: 12, background: 'rgba(255,127,107,.08)', color: 'var(--coral)', fontWeight: 750, cursor: 'pointer' }}>⚡ Tình huống</button>
+        <button onClick={() => setToolsOpen(value => !value)} style={{ padding: '10px 8px', border: '1px solid rgba(26,29,59,.09)', borderRadius: 12, background: 'white', color: 'var(--navy)', fontWeight: 700, cursor: 'pointer' }}>••• Tiện ích</button>
       </div>
+      {toolsOpen && <div style={{ margin: '0 20px 12px', padding: 10, display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, background: 'white', border: '1px solid rgba(26,29,59,.08)', borderRadius: 'var(--radius-md)' }}>
+        <button onClick={handleCopy} style={{ padding: 9, border: 'none', background: 'rgba(26,29,59,.04)', borderRadius: 10, fontSize: '.75rem', fontWeight: 650 }}>{copied ? '✓ Đã sao chép' : '📋 Sao chép'}</button>
+        <button onClick={() => setShowPacking(true)} style={{ padding: 9, border: 'none', background: 'rgba(26,29,59,.04)', borderRadius: 10, fontSize: '.75rem', fontWeight: 650 }}>🧳 Chuẩn bị</button>
+        <button onClick={() => setShowEmergency(true)} style={{ padding: 9, border: 'none', background: 'rgba(239,68,68,.06)', color: '#B91C1C', borderRadius: 10, fontSize: '.75rem', fontWeight: 650 }}>🚨 Khẩn cấp</button>
+      </div>}
 
       {/* Weather banner */}
       {weather && !weatherDismissed && <WeatherBanner weather={weather} onDismiss={() => setWeatherDismissed(true)} />}
+
+      {feasibility && <FeasibilityAssistant
+        feasibility={feasibility}
+        activeDay={activeDay}
+        expanded={showFeasibility}
+        onToggle={() => setShowFeasibility(value => !value)}
+        onPreview={previewFeasibilityOptimization}
+        previewing={previewingFeasibility}
+        preview={optimizationPreview}
+        onApply={applyFeasibilityOptimization}
+        applying={optimizingFeasibility}
+        onCancelPreview={() => setOptimizationPreview(null)}
+      />}
 
       {/* Tour toast notification */}
       {tourToast && (
@@ -527,32 +672,19 @@ export default function TripDetailPage() {
         );
       })()}
 
-      {/* Summary */}
-      <div style={{ margin: '0 20px 16px', padding: '16px', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', borderRadius: 'var(--radius-lg)', color: 'white' }}>
-        <p style={{ fontSize: '0.8rem', opacity: 0.88, margin: '0 0 8px', lineHeight: 1.5 }}>{trip.summary}</p>
-        <div style={{ display: 'flex', gap: 16 }}>
-          <span style={{ fontSize: '0.875rem', fontWeight: 700 }}>💰 {trip.total_cost_estimate}</span>
-          <span style={{ fontSize: '0.875rem', fontWeight: 700 }}>📅 {trip.duration} ngày</span>
-        </div>
-      </div>
-
-      {trip.highlights?.length > 0 && (
-        <div style={{ margin: '0 20px 12px', padding: '12px 16px', background: 'linear-gradient(135deg,rgba(255,127,107,0.07),rgba(255,154,92,0.07))', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,127,107,0.12)' }}>
-          <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--coral)', marginBottom: 6, letterSpacing: '0.05em' }}>ĐIỂM NỔI BẬT</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {trip.highlights.map(h => (
-              <span key={h} style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--navy)', background: 'white', padding: '3px 10px', borderRadius: 'var(--radius-full)', border: '1px solid rgba(26,29,59,0.08)' }}>📍 {h}</span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {trip.ai_insight && (
-        <div style={{ margin: '0 20px 12px', padding: '12px 16px', background: 'rgba(212,175,55,0.06)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(212,175,55,0.15)', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-          <span style={{ fontSize: 18, flexShrink: 0 }}>✨</span>
-          <p style={{ fontSize: '0.8125rem', color: 'var(--navy)', lineHeight: 1.5, margin: 0 }}>{trip.ai_insight}</p>
-        </div>
-      )}
+      {/* Compact overview; details are progressive disclosure instead of separate cards. */}
+      <section style={{ margin: '0 20px 16px', padding: '14px 16px', background: 'white', border: '1px solid rgba(26,29,59,.08)', borderRadius: 'var(--radius-lg)' }}>
+        <button onClick={() => setOverviewOpen(value => !value)} style={{ width: '100%', padding: 0, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer' }}>
+          <span style={{ width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 12, background: 'rgba(255,127,107,.1)' }}>🧭</span>
+          <span style={{ flex: 1 }}><span style={{ display: 'block', fontWeight: 750, color: 'var(--navy)', fontSize: '.88rem' }}>Tổng quan chuyến đi</span><span style={{ display: 'block', marginTop: 3, color: 'var(--navy-muted)', fontSize: '.73rem' }}>{trip.duration} ngày · Dự kiến {trip.total_cost_estimate}</span></span>
+          <span style={{ color: 'var(--navy-muted)' }}>{overviewOpen ? '⌃' : '⌄'}</span>
+        </button>
+        {overviewOpen && <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(26,29,59,.06)' }}>
+          <p style={{ fontSize: '.8rem', color: 'var(--navy-muted)', lineHeight: 1.55, margin: 0 }}>{trip.summary}</p>
+          {trip.highlights?.length > 0 && <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>{trip.highlights.map(highlight => <span key={highlight} style={{ fontSize: '.72rem', fontWeight: 650, color: 'var(--navy)', background: 'rgba(26,29,59,.04)', padding: '4px 8px', borderRadius: 999 }}>📍 {highlight}</span>)}</div>}
+          {trip.ai_insight && <p style={{ margin: '10px 0 0', padding: '9px 11px', background: 'rgba(212,175,55,.06)', borderRadius: 10, color: 'var(--navy)', fontSize: '.76rem', lineHeight: 1.5 }}>✨ {trip.ai_insight}</p>}
+        </div>}
+      </section>
 
       {/* Day tabs */}
       <div style={{ display: 'flex', overflowX: 'auto', padding: '0 20px', borderBottom: '1px solid rgba(26,29,59,0.06)' }}>
@@ -586,8 +718,8 @@ export default function TripDetailPage() {
               {currentDay.day_tip && <p style={{ fontSize: '0.8rem', color: 'var(--navy-muted)', lineHeight: 1.5, margin: 0 }}>💡 {currentDay.day_tip}</p>}
             </div>
             <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-              <button onClick={() => { setPlaceSelected(null); setPlaceQuery(''); setPlaceResults([]); setPlaceTime('10:00'); setPlaceSearchOpen(true); }} style={{ padding: '7px 12px', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', border: 'none', borderRadius: 'var(--radius-full)', fontSize: '0.78rem', fontWeight: 700, color: 'white', cursor: 'pointer', fontFamily: 'var(--font)' }}>
-                🔍 Tìm địa điểm
+              <button onClick={() => { setPlaceSelected(null); setPlaceSuggestion(null); setSmartPlacement(true); setPlaceQuery(''); setPlaceTime('10:00'); setPlaceSearchOpen(true); searchPlaces(); }} style={{ padding: '7px 12px', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', border: 'none', borderRadius: 'var(--radius-full)', fontSize: '0.78rem', fontWeight: 700, color: 'white', cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                ＋ Chèn điểm phù hợp
               </button>
               <button onClick={() => openEdit(activeDay, null)} style={{ padding: '7px 12px', background: 'rgba(255,127,107,0.08)', border: '1px solid rgba(255,127,107,0.2)', borderRadius: 'var(--radius-full)', fontSize: '0.78rem', fontWeight: 700, color: 'var(--coral)', cursor: 'pointer', fontFamily: 'var(--font)' }}>
                 ✏️
@@ -655,8 +787,8 @@ export default function TripDetailPage() {
       {chatOpen && (
         <div style={{ position: 'fixed', bottom: 148, right: 16, width: 'min(360px, calc(100vw - 32px))', height: 420, background: 'white', borderRadius: 'var(--radius-xl)', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', zIndex: 40, overflow: 'hidden' }}>
           <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(26,29,59,0.06)', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', color: 'white' }}>
-            <p style={{ fontWeight: 700, margin: 0, fontSize: '0.9375rem' }}>🤖 Hỗ Trợ Du Lịch Huế</p>
-            <p style={{ fontSize: '0.75rem', margin: 0, opacity: 0.88 }}>Hỏi bất cứ điều gì về lịch trình!</p>
+            <p style={{ fontWeight: 700, margin: 0, fontSize: '0.9375rem' }}>🤖 Trợ lý lịch trình</p>
+            <p style={{ fontSize: '0.75rem', margin: 0, opacity: 0.88 }}>Hỏi hoặc yêu cầu chỉnh lịch — chỉ lưu sau khi bạn xác nhận.</p>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             {chatMessages.length === 0 && (
@@ -664,7 +796,7 @@ export default function TripDetailPage() {
                 <p style={{ fontSize: '2rem', marginBottom: 8 }}>👋</p>
                 <p style={{ fontSize: '0.85rem' }}>Chào! Tôi có thể giúp gì cho chuyến đi của bạn?</p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
-                  {['Thời tiết hôm nay thế nào?','Nên ăn gì ở Huế?','Hướng dẫn đến Kinh Thành'].map(q => (
+                  {['Thêm một quán ăn gần tuyến','Dời hoạt động chiều muộn hơn','Lịch hôm nay có quá dày không?'].map(q => (
                     <button key={q} onClick={() => { setChatInput(q); }} style={{ padding: '6px 12px', background: 'rgba(255,127,107,0.07)', border: '1px solid rgba(255,127,107,0.2)', borderRadius: 'var(--radius-full)', fontSize: '0.75rem', color: 'var(--coral)', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{q}</button>
                   ))}
                 </div>
@@ -674,6 +806,15 @@ export default function TripDetailPage() {
               <div key={i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
                 <div style={{ maxWidth: '82%', padding: '8px 12px', borderRadius: msg.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px', background: msg.role === 'user' ? 'linear-gradient(135deg,var(--coral),var(--warm-orange))' : 'rgba(26,29,59,0.05)', color: msg.role === 'user' ? 'white' : 'var(--navy)', fontSize: '0.875rem', lineHeight: 1.5 }}>
                   {msg.role === 'assistant' ? renderAiMarkdown(msg.content) : msg.content}
+                  {msg.proposal && (
+                    <div style={{ marginTop: 10, padding: 10, background: 'white', border: '1px solid rgba(255,127,107,.2)', borderRadius: 12 }}>
+                      <p style={{ margin: '0 0 6px', fontSize: '.72rem', fontWeight: 800, color: 'var(--coral)' }}>BẢN XEM TRƯỚC</p>
+                      {msg.proposal.summary.map(item => <p key={item} style={{ margin: '3px 0', fontSize: '.75rem', lineHeight: 1.4 }}>• {item}</p>)}
+                      <button onClick={() => applyChatProposal(i, msg.proposal!)} disabled={customizing || msg.applied} style={{ width: '100%', marginTop: 8, padding: '8px 10px', border: 'none', borderRadius: 999, background: msg.applied ? 'rgba(34,197,94,.12)' : 'linear-gradient(135deg,var(--coral),var(--warm-orange))', color: msg.applied ? '#15803D' : 'white', fontWeight: 700, cursor: msg.applied ? 'default' : 'pointer' }}>
+                        {msg.applied ? '✓ Đã áp dụng' : customizing ? 'Đang áp dụng…' : 'Xác nhận thay đổi'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -706,6 +847,31 @@ export default function TripDetailPage() {
                 </a>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+      {adaptOpen && (
+        <div onClick={() => !adapting && setAdaptOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 80, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 16px 16px' }}>
+          <div onClick={event => event.stopPropagation()} style={{ width: '100%', maxWidth: 520, background: 'white', borderRadius: 'var(--radius-xl)', padding: '20px', boxShadow: '0 20px 60px rgba(0,0,0,.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div><p className="section-eyebrow">ADAPTIVE TRIP</p><h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--navy)', margin: 0 }}>Chuyện gì vừa xảy ra?</h3><p style={{ fontSize: '.8rem', color: 'var(--navy-muted)', margin: '4px 0 0' }}>HueViVu sẽ sửa Ngày {activeDay + 1} và lưu ngay.</p></div>
+              <button onClick={() => setAdaptOpen(false)} disabled={adapting} style={{ border: 'none', background: 'rgba(26,29,59,.06)', width: 34, height: 34, borderRadius: '50%', fontSize: 20 }}>×</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9 }}>
+              {[
+                ['rain', '🌧️', 'Trời đang mưa', 'Đổi tối đa 3 điểm ngoài trời'],
+                ['hungry', '🍜', 'Cả nhóm đang đói', 'Đưa bữa ăn lên hoặc chèn quán gần'],
+                ['tired', '😮‍💨', 'Mọi người đã mệt', 'Giảm điểm và thêm 45 phút nghỉ'],
+                ['closed', '🚪', 'Điểm này đóng cửa', activeActivity === null ? 'Mở hoạt động cần thay trước' : `Thay hoạt động số ${activeActivity + 1}`],
+              ].map(([key, icon, title, description]) => (
+                <button key={key} disabled={adapting || (key === 'closed' && activeActivity === null)} onClick={() => applyAdaptation(key as any)} style={{ padding: 14, textAlign: 'left', border: '1.5px solid rgba(26,29,59,.08)', borderRadius: 'var(--radius-md)', background: 'rgba(26,29,59,.02)', cursor: 'pointer', opacity: key === 'closed' && activeActivity === null ? .45 : 1 }}><span style={{ fontSize: 24 }}>{icon}</span><p style={{ fontWeight: 700, color: 'var(--navy)', margin: '7px 0 3px' }}>{title}</p><p style={{ fontSize: '.72rem', color: 'var(--navy-muted)', margin: 0, lineHeight: 1.4 }}>{description}</p></button>
+              ))}
+            </div>
+            <div style={{ marginTop: 10, padding: 14, background: 'rgba(255,127,107,.06)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,127,107,.15)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div><p style={{ fontWeight: 700, color: 'var(--navy)', margin: 0 }}>⏰ Tôi đang đến trễ</p><p style={{ fontSize: '.72rem', color: 'var(--navy-muted)', margin: '2px 0 0' }}>Lùi phần lịch còn lại, tự bỏ hoạt động vượt 22:00.</p></div><select value={delayMinutes} onChange={e => setDelayMinutes(Number(e.target.value))} style={{ padding: '7px 9px', border: '1px solid rgba(26,29,59,.12)', borderRadius: 10, background: 'white' }}><option value={30}>30 phút</option><option value={45}>45 phút</option><option value={60}>60 phút</option><option value={90}>90 phút</option></select></div>
+              <button onClick={() => applyAdaptation('late')} disabled={adapting} style={{ width: '100%', marginTop: 10, padding: 10, border: 'none', borderRadius: 'var(--radius-full)', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', color: 'white', fontWeight: 700 }}>{adapting ? 'Đang tính lại…' : `Lùi lịch ${delayMinutes} phút`}</button>
+            </div>
+            {adaptError && <p style={{ margin: '10px 0 0', padding: '9px 12px', background: 'rgba(239,68,68,.08)', color: '#B91C1C', borderRadius: 10, fontSize: '.8rem' }}>{adaptError}</p>}
           </div>
         </div>
       )}
@@ -792,7 +958,7 @@ export default function TripDetailPage() {
             ) : (
               <>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                  <h3 style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--navy)', margin: 0 }}>🔍 Thêm địa điểm — Ngày {activeDay + 1}</h3>
+                  <div><h3 style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--navy)', margin: 0 }}>Chèn địa điểm vào Ngày {activeDay + 1}</h3><p style={{ margin: '3px 0 0', color: 'var(--navy-muted)', fontSize: '.74rem' }}>Ưu tiên điểm gần tuyến và khoảng trống đủ thời gian.</p></div>
                   <button onClick={() => setPlaceSearchOpen(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--navy-muted)' }}>×</button>
                 </div>
                 <div style={{ position: 'relative', marginBottom: 12 }}>
@@ -805,11 +971,11 @@ export default function TripDetailPage() {
                   />
                   <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 16, pointerEvents: 'none' }}>🔍</span>
                 </div>
-                {!placeSelected && placeResults.length === 0 && (
+                {!placeSelected && (
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-                    {([['🏛️','heritage'],['🍜','food'],['☕','cafe'],['🌿','nature'],['🛕','temple'],['🎨','craft_village']] as [string,string][]).map(([icon, cat]) => (
-                      <button key={cat} onClick={() => { setPlaceQuery(cat); searchPlaces(cat); }} style={{ padding: '6px 12px', background: 'rgba(26,29,59,0.05)', border: '1px solid rgba(26,29,59,0.1)', borderRadius: 'var(--radius-full)', fontSize: '0.78rem', fontWeight: 600, color: 'var(--navy)', cursor: 'pointer', fontFamily: 'var(--font)' }}>
-                        {icon} {cat}
+                    {([['🏛️','heritage','Di sản'],['🍜','food','Ăn uống'],['☕','cafe','Cà phê'],['🌿','nature','Thiên nhiên'],['🛕','temple','Chùa'],['🎨','craft_village','Làng nghề']] as [string,string,string][]).map(([icon, cat, label]) => (
+                      <button key={cat} onClick={() => { setPlaceQuery(''); searchPlaces('', cat); }} style={{ padding: '6px 12px', background: 'rgba(26,29,59,0.05)', border: '1px solid rgba(26,29,59,0.1)', borderRadius: 'var(--radius-full)', fontSize: '0.78rem', fontWeight: 600, color: 'var(--navy)', cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                        {icon} {label}
                       </button>
                     ))}
                   </div>
@@ -817,7 +983,7 @@ export default function TripDetailPage() {
                 {!placeSelected && (
                   <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
                     {placeResults.map((p: any) => (
-                      <button key={p.id} onClick={() => setPlaceSelected(p)} style={{ display: 'flex', gap: 12, padding: '10px 12px', background: 'rgba(26,29,59,0.02)', border: '1.5px solid rgba(26,29,59,0.08)', borderRadius: 'var(--radius-md)', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font)', alignItems: 'center' }}>
+                      <button key={p.id} onClick={() => selectPlace(p)} style={{ display: 'flex', gap: 12, padding: '10px 12px', background: 'rgba(26,29,59,0.02)', border: '1.5px solid rgba(26,29,59,0.08)', borderRadius: 'var(--radius-md)', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--font)', alignItems: 'center' }}>
                         {p.img ? <img src={p.img} alt={p.name} style={{ width: 52, height: 52, borderRadius: 'var(--radius-sm)', objectFit: 'cover', flexShrink: 0 }} /> : <span style={{ width: 52, height: 52, borderRadius: 'var(--radius-sm)', background: 'rgba(255,127,107,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>{TYPE_EMOJI[p.category] || '📍'}</span>}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ fontWeight: 700, fontSize: '0.875rem', color: 'var(--navy)', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</p>
@@ -826,6 +992,7 @@ export default function TripDetailPage() {
                             {p.rating && <span style={{ fontSize: '0.72rem', color: '#F59E0B', fontWeight: 700 }}>⭐ {p.rating}</span>}
                             {p.price && <span style={{ fontSize: '0.72rem', color: 'var(--navy-muted)' }}>💰 {p.price}</span>}
                             {p.duration && <span style={{ fontSize: '0.72rem', color: 'var(--navy-muted)' }}>⏱ {p.duration}</span>}
+                            {p.route_distance_km != null && <span style={{ fontSize: '0.72rem', color: '#15803D', fontWeight: 700 }}>↗ {p.route_distance_km.toFixed(1)} km từ tuyến</span>}
                           </div>
                         </div>
                         <span style={{ fontSize: 18, flexShrink: 0, opacity: 0.5 }}>›</span>
@@ -847,26 +1014,30 @@ export default function TripDetailPage() {
                         {placeSelected.description && <p style={{ fontSize: '0.75rem', color: 'var(--navy-muted)', margin: 0, lineHeight: 1.4 }}>{placeSelected.description.slice(0, 80)}{placeSelected.description.length > 80 ? '...' : ''}</p>}
                       </div>
                     </div>
-                    <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--navy)', marginBottom: 8 }}>CHỌN GIỜ GHÉ THĂM</p>
-                    {(trip?.itinerary?.days?.[activeDay]?.activities?.length ?? 0) > 0 && (
-                      <div style={{ marginBottom: 10, padding: '8px 12px', background: 'rgba(26,29,59,0.03)', borderRadius: 'var(--radius-sm)', fontSize: '0.73rem', color: 'var(--navy-muted)' }}>
-                        <p style={{ fontWeight: 700, margin: '0 0 4px' }}>📅 Ngày {activeDay + 1} đã có:</p>
-                        {(trip?.itinerary?.days?.[activeDay]?.activities || []).map((a, ai) => <p key={ai} style={{ margin: '2px 0' }}>• {a.time} — {a.name}</p>)}
-                      </div>
-                    )}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
-                      {TIMES.map(t => {
-                        const busy = busyAt(t);
-                        return (
-                          <button key={t} onClick={() => !busy && setPlaceTime(t)} disabled={!!busy} style={{ padding: '7px 13px', background: placeTime === t ? 'var(--coral)' : busy ? 'rgba(26,29,59,0.03)' : 'white', color: placeTime === t ? 'white' : busy ? 'rgba(26,29,59,0.25)' : 'var(--navy)', border: `1.5px solid ${placeTime === t ? 'var(--coral)' : busy ? 'rgba(26,29,59,0.06)' : 'rgba(26,29,59,0.12)'}`, borderRadius: 'var(--radius-full)', fontSize: '0.8rem', fontWeight: 600, cursor: busy ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)' }}>
-                            {busy ? '🔒' : ''}{t}
-                          </button>
-                        );
-                      })}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+                      <button onClick={() => setSmartPlacement(true)} style={{ padding: '9px 10px', borderRadius: 12, border: `1.5px solid ${smartPlacement ? 'var(--coral)' : 'rgba(26,29,59,.1)'}`, background: smartPlacement ? 'rgba(255,127,107,.08)' : 'white', color: smartPlacement ? 'var(--coral)' : 'var(--navy)', fontWeight: 700 }}>✨ Chèn thông minh</button>
+                      <button onClick={() => setSmartPlacement(false)} style={{ padding: '9px 10px', borderRadius: 12, border: `1.5px solid ${!smartPlacement ? 'var(--coral)' : 'rgba(26,29,59,.1)'}`, background: !smartPlacement ? 'rgba(255,127,107,.08)' : 'white', color: !smartPlacement ? 'var(--coral)' : 'var(--navy)', fontWeight: 700 }}>🕐 Tự chọn giờ</button>
                     </div>
-                    {busyAt(placeTime) && <p style={{ fontSize: '0.75rem', color: '#EF4444', marginBottom: 12 }}>⚠️ Giờ này gần với &quot;{busyAt(placeTime)?.name}&quot; — chọn giờ khác</p>}
-                    <button onClick={handleAddPlace} disabled={placeAdding || !!busyAt(placeTime)} style={{ width: '100%', padding: '13px', background: (!placeAdding && !busyAt(placeTime)) ? 'linear-gradient(135deg,var(--coral),var(--warm-orange))' : 'rgba(26,29,59,0.1)', color: (!placeAdding && !busyAt(placeTime)) ? 'white' : 'var(--navy-muted)', border: 'none', borderRadius: 'var(--radius-full)', fontWeight: 700, fontSize: '0.9375rem', cursor: (!placeAdding && !busyAt(placeTime)) ? 'pointer' : 'not-allowed', fontFamily: 'var(--font)' }}>
-                      {placeAdding ? '⏳ Đang thêm...' : `✅ Thêm vào ${placeTime} · Ngày ${activeDay + 1}`}
+
+                    {smartPlacement ? (
+                      <div style={{ padding: '12px 14px', marginBottom: 14, borderRadius: 'var(--radius-md)', background: placeSuggestion?.feasible ? 'rgba(34,197,94,.08)' : 'rgba(245,158,11,.08)', border: `1px solid ${placeSuggestion?.feasible ? 'rgba(34,197,94,.2)' : 'rgba(245,158,11,.22)'}` }}>
+                        {suggestionLoading ? <p style={{ margin: 0, fontSize: '.8rem', color: 'var(--navy-muted)' }}>Đang tính khoảng trống và quãng đường…</p> : <>
+                          <p style={{ margin: '0 0 4px', fontWeight: 800, color: placeSuggestion?.feasible ? '#15803D' : '#B45309', fontSize: '.84rem' }}>{placeSuggestion?.feasible ? `Đề xuất ${placeSuggestion.time} · Ngày ${activeDay + 1}` : 'Chưa tìm được vị trí chèn an toàn'}</p>
+                          <p style={{ margin: 0, fontSize: '.75rem', lineHeight: 1.45, color: 'var(--navy-muted)' }}>{placeSuggestion?.reason || 'Đang phân tích lịch trình.'}</p>
+                        </>}
+                      </div>
+                    ) : <>
+                      <p style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--navy)', marginBottom: 8 }}>CHỌN GIỜ GHÉ THĂM</p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                        {TIMES.map(t => {
+                          const busy = busyAt(t);
+                          return <button key={t} onClick={() => !busy && setPlaceTime(t)} disabled={!!busy} style={{ padding: '7px 13px', background: placeTime === t ? 'var(--coral)' : busy ? 'rgba(26,29,59,0.03)' : 'white', color: placeTime === t ? 'white' : busy ? 'rgba(26,29,59,0.25)' : 'var(--navy)', border: `1.5px solid ${placeTime === t ? 'var(--coral)' : busy ? 'rgba(26,29,59,0.06)' : 'rgba(26,29,59,0.12)'}`, borderRadius: 'var(--radius-full)', fontSize: '0.8rem', fontWeight: 600, cursor: busy ? 'not-allowed' : 'pointer', fontFamily: 'var(--font)' }}>{busy ? '🔒 ' : ''}{t}</button>;
+                        })}
+                      </div>
+                      {busyAt(placeTime) && <p style={{ fontSize: '0.75rem', color: '#EF4444', marginBottom: 12 }}>⚠️ Giờ này gần với &quot;{busyAt(placeTime)?.name}&quot; — chọn giờ khác</p>}
+                    </>}
+                    <button onClick={handleAddPlace} disabled={placeAdding || (smartPlacement ? !placeSuggestion?.feasible : !!busyAt(placeTime))} style={{ width: '100%', padding: '13px', background: (!placeAdding && (smartPlacement ? placeSuggestion?.feasible : !busyAt(placeTime))) ? 'linear-gradient(135deg,var(--coral),var(--warm-orange))' : 'rgba(26,29,59,0.1)', color: (!placeAdding && (smartPlacement ? placeSuggestion?.feasible : !busyAt(placeTime))) ? 'white' : 'var(--navy-muted)', border: 'none', borderRadius: 'var(--radius-full)', fontWeight: 700, fontSize: '0.9375rem', cursor: 'pointer', fontFamily: 'var(--font)' }}>
+                      {placeAdding ? 'Đang chèn…' : `Thêm vào ${smartPlacement ? placeSuggestion?.time || 'vị trí phù hợp' : placeTime} · Ngày ${activeDay + 1}`}
                     </button>
                   </div>
                 )}

@@ -28,12 +28,15 @@ export default function CommunityPage() {
 
   const handleLike = async (tripId: string) => {
     const token = localStorage.getItem('hv_token');
-    setLikedMap(prev => ({ ...prev, [tripId]: !prev[tripId] }));
-    setFeed(prev => prev.map(t => t.id === tripId ? { ...t, like_count: t.liked ? t.like_count - 1 : t.like_count + 1 } : t));
-    await fetch(`/api/feed/${tripId}/like`, {
+    if (!token) { alert('Hãy tạo hành trình hoặc đăng nhập trước khi thích.'); return; }
+    const response = await fetch(`/api/feed/${tripId}/like`, {
       method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      headers: { Authorization: `Bearer ${token}` },
     });
+    if (!response.ok) { alert('Không thể cập nhật lượt thích.'); return; }
+    const data = await response.json();
+    setLikedMap(prev => ({ ...prev, [tripId]: data.liked }));
+    setFeed(prev => prev.map(t => t.id === tripId ? { ...t, liked: data.liked, like_count: Math.max(0, t.like_count + (data.liked ? 1 : -1)) } : t));
   };
 
   return (

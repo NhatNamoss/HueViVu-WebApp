@@ -1,289 +1,166 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { Camera, Mic, Square, Volume2, ChevronLeft } from 'lucide-react';
-import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
+import { Camera, ChevronLeft, MapPin, Mic, MicOff, Sparkles, Volume2, VolumeX } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+
+type GuideMode = 'identify' | 'story' | 'practical' | 'next';
+const MODES: { key: GuideMode; label: string; prompt: string }[] = [
+  { key: 'identify', label: '👁 Nhận diện', prompt: 'Đây là gì? Hãy nhận diện và giải thích ngắn gọn.' },
+  { key: 'story', label: '📖 Kể chuyện', prompt: 'Kể cho tôi câu chuyện văn hóa hoặc lịch sử liên quan đến thứ đang thấy.' },
+  { key: 'practical', label: '🎒 Mẹo tham quan', prompt: 'Tôi cần biết những thông tin thực tế nào trước khi tham quan?' },
+  { key: 'next', label: '🧭 Đi đâu tiếp', prompt: 'Từ đây, tôi nên làm gì hoặc đi đâu tiếp theo?' },
+];
 
 export default function HueViVuLivePage() {
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [transcript, setTranscript] = useState('');
-  const [aiResponse, setAiResponse] = useState('');
-  const [status, setStatus] = useState<'idle' | 'listening' | 'analyzing' | 'speaking'>('idle');
-  
   const recognitionRef = useRef<any>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const transcriptRef = useRef('');
 
-  // Initialize Camera
-  useEffect(() => {
-    async function setupCamera() {
-      try {
-        const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: 'environment' } 
-        });
-        setStream(mediaStream);
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-        }
-      } catch (err) {
-        console.error("Camera access denied:", err);
-      }
-    }
-    setupCamera();
+  const [started, setStarted] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [mode, setMode] = useState<GuideMode>('identify');
+  const [status, setStatus] = useState<'idle' | 'listening' | 'analyzing' | 'speaking'>('idle');
+  const [transcript, setTranscript] = useState('');
+  const [reply, setReply] = useState('');
+  const [error, setError] = useState('');
+  const [muted, setMuted] = useState(false);
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [weather, setWeather] = useState<any>(null);
+  const [nearby, setNearby] = useState<any[]>([]);
 
-    // Initialize SpeechRecognition
-    if (typeof window !== 'undefined') {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        const recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = true;
-        recognition.lang = 'vi-VN';
-
-        recognition.onresult = (event: any) => {
-          let currentTranscript = '';
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            currentTranscript += event.results[i][0].transcript;
-          }
-          setTranscript(currentTranscript);
-        };
-
-        recognition.onspeechend = () => {
-          recognition.stop();
-        };
-
-        recognition.onend = () => {
-          // If we were recording and it ended automatically, handle it
-          if (isRecording) {
-            handleSpeechEnd();
-          }
-        };
-
-        recognitionRef.current = recognition;
-      }
-    }
-
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
+  useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
+  useEffect(() => { fetch('/api/weather').then(r => r.json()).then(setWeather).catch(() => {}); }, []);
+  useEffect(() => () => {
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    window.speechSynthesis?.cancel();
   }, []);
 
-  const toggleRecording = () => {
-    if (!recognitionRef.current) {
-      alert("Trình duyệt không hỗ trợ Web Speech API.");
-      return;
-    }
-
-    if (isRecording) {
-      // Stop recording manually
-      setIsRecording(false);
-      recognitionRef.current.stop();
-      handleSpeechEnd();
-    } else {
-      // Start recording
-      setIsRecording(true);
-      setTranscript('');
-      setAiResponse('');
-      setStatus('listening');
-      try {
-        recognitionRef.current.start();
-      } catch (e) {
-        console.error("Speech recognition error:", e);
-      }
-    }
-  };
-
-  const captureFrame = (): string | null => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        return canvas.toDataURL('image/jpeg', 0.8);
-      }
-    }
-    return null;
-  };
-
-  const handleSpeechEnd = async () => {
-    setIsRecording(false);
-    setStatus('analyzing');
-    
-    // Fallback if no transcript
-    const promptText = transcript.trim() || "Đây là vật gì?";
-    
-    const base64Image = captureFrame();
-    
-    if (!base64Image) {
-      setAiResponse("Lỗi: Không thể chụp ảnh từ camera.");
-      setStatus('idle');
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/vision', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          image: base64Image, 
-          prompt: promptText
-        }),
-      });
-
-      const data = await res.json();
-      
-      if (res.ok) {
-        setAiResponse(data.reply);
-        speakResponse(data.reply);
-      } else {
-        setAiResponse("Lỗi từ server: " + data.error);
-        setStatus('idle');
-      }
-    } catch (err) {
-      console.error(err);
-      setAiResponse("Lỗi kết nối tới AI.");
-      setStatus('idle');
-    }
-  };
-
-  const speakResponse = (text: string) => {
-    setStatus('speaking');
-    
-    // Sử dụng Google Translate TTS API không chính thức (Zero Cost, Giọng Việt chuẩn)
-    // Phân tách text thành các đoạn ngắn (Google TTS giới hạn ký tự)
-    let chunks: string[] = Array.from(text.match(/[^.?!]+[.?!]*/g) || [text]);
-    chunks = chunks.map(c => c.trim()).filter(c => c.length > 0);
-    let currentChunk = 0;
-
-    const playNextChunk = () => {
-      if (currentChunk >= chunks.length) {
-        setStatus('idle');
-        return;
-      }
-      
-      const chunkText = chunks[currentChunk];
-      const url = `/api/tts?text=${encodeURIComponent(chunkText)}`;
-      
-      const audio = new Audio(url);
-      audio.playbackRate = 1.25; // Tăng tốc độ đọc lên một chút
-      audio.onended = () => {
-        currentChunk++;
-        playNextChunk();
-      };
-      audio.onerror = (e) => {
-        console.error("Google TTS Playback Error:", e);
-        // Fallback to next chunk if one fails
-        currentChunk++;
-        playNextChunk();
-      };
-      
-      audio.play().catch(e => {
-        console.error("Audio Play Error:", e);
-        setStatus('idle');
-      });
+  const setupSpeechRecognition = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false; recognition.interimResults = true; recognition.lang = 'vi-VN';
+    recognition.onresult = (event: any) => {
+      let text = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) text += event.results[i][0].transcript;
+      setTranscript(text);
     };
-
-    playNextChunk();
+    recognition.onend = () => {
+      if (status === 'listening') analyze(transcriptRef.current || MODES.find(item => item.key === mode)!.prompt);
+    };
+    recognition.onerror = () => { setStatus('idle'); setError('Không nghe rõ. Bạn có thể dùng các nút hỏi nhanh bên dưới.'); };
+    recognitionRef.current = recognition;
   };
+
+  const startGuide = async () => {
+    setStarting(true); setError('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      streamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      setupSpeechRecognition();
+      setStarted(true);
+      navigator.geolocation?.getCurrentPosition(pos => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }), () => {});
+    } catch {
+      setError('Không thể mở camera. Hãy cấp quyền camera hoặc kiểm tra thiết bị rồi thử lại.');
+    } finally { setStarting(false); }
+  };
+
+  const captureFrame = () => {
+    const video = videoRef.current; const canvas = canvasRef.current;
+    if (!video || !canvas || !video.videoWidth) return null;
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.78);
+  };
+
+  const speak = (text: string) => {
+    if (muted || !window.speechSynthesis) { setStatus('idle'); return; }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'vi-VN'; utterance.rate = 1.02;
+    utterance.onend = () => setStatus('idle'); utterance.onerror = () => setStatus('idle');
+    setStatus('speaking'); window.speechSynthesis.speak(utterance);
+  };
+
+  const analyze = async (prompt: string, selectedMode = mode) => {
+    const image = captureFrame();
+    if (!image) { setError('Camera chưa sẵn sàng. Hãy giữ máy ổn định và thử lại.'); return; }
+    setStatus('analyzing'); setError(''); setReply('');
+    try {
+      const response = await fetch('/api/vision', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image, prompt, mode: selectedMode, lat: location?.lat, lng: location?.lng, weather: weather ? `${weather.condition_vi}, ${weather.temp}°C` : '' }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Live Guide chưa phản hồi');
+      setReply(data.reply); setNearby(data.nearby || []); speak(data.reply);
+    } catch (cause: any) { setStatus('idle'); setError(cause.message); }
+  };
+
+  const startListening = () => {
+    if (!recognitionRef.current) { setError('Trình duyệt này chưa hỗ trợ nhận giọng nói. Hãy dùng nút hỏi nhanh.'); return; }
+    setTranscript(''); setReply(''); setError(''); setStatus('listening');
+    try { recognitionRef.current.start(); } catch { setStatus('idle'); }
+  };
+  const stopListening = () => recognitionRef.current?.stop();
 
   return (
-    <div className="relative w-full h-screen bg-black overflow-hidden flex flex-col items-center justify-center font-sans">
-      {/* Video Background */}
-      <video 
-        ref={videoRef}
-        autoPlay 
-        playsInline 
-        muted 
-        className="absolute inset-0 w-full h-full object-cover opacity-80"
-      />
-      
-      {/* Hidden Canvas */}
+    <main className="relative min-h-screen bg-[#10131f] text-white overflow-hidden">
+      <video ref={videoRef} autoPlay playsInline muted className={`fixed inset-0 w-full h-full object-cover transition-opacity ${started ? 'opacity-70' : 'opacity-20'}`} />
       <canvas ref={canvasRef} className="hidden" />
+      <div className="fixed inset-0 bg-gradient-to-b from-black/70 via-transparent to-black/90 pointer-events-none" />
 
-      {/* Top Bar */}
-      <div className="absolute top-0 inset-x-0 p-6 flex justify-between items-center z-10 bg-gradient-to-b from-black/60 to-transparent">
-        <div className="flex items-center gap-4">
-          <button onClick={() => router.back()} className="text-white hover:text-gray-300 transition-colors">
-            <ChevronLeft className="w-6 h-6" />
-          </button>
-          <Link href="/" className="text-white text-sm font-semibold tracking-wider">
-            HUEVIVU
-          </Link>
-        </div>
-        <div className="flex items-center gap-2 px-3 py-1 bg-black/40 rounded-full border border-white/10 backdrop-blur-md">
-          <div className={`w-2 h-2 rounded-full ${status === 'listening' ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></div>
-          <span className="text-white/80 text-xs font-medium uppercase tracking-widest">
-            {status === 'idle' ? 'Live' : status === 'listening' ? 'Listening' : status === 'analyzing' ? 'Analyzing' : 'Speaking'}
-          </span>
-        </div>
-      </div>
+      <header className="relative z-20 p-4 flex items-center justify-between">
+        <button onClick={() => router.back()} className="w-10 h-10 rounded-full bg-black/40 backdrop-blur flex items-center justify-center"><ChevronLeft /></button>
+        <div className="text-center"><p className="text-[10px] tracking-[0.25em] text-amber-300">HUEVIVU</p><h1 className="font-bold">Live Guide</h1></div>
+        <button onClick={() => { setMuted(value => !value); window.speechSynthesis?.cancel(); }} className="w-10 h-10 rounded-full bg-black/40 backdrop-blur flex items-center justify-center">{muted ? <VolumeX size={19} /> : <Volume2 size={19} />}</button>
+      </header>
 
-      {/* AI Radar/Focus Overlay */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-        <div className="w-64 h-64 border-2 border-white/20 rounded-full flex items-center justify-center relative">
-          <div className="w-2 h-2 bg-white rounded-full"></div>
-          {status === 'analyzing' && (
-            <div className="absolute inset-0 border-2 border-[#D4AF37] rounded-full animate-ping opacity-50"></div>
-          )}
-          {status === 'speaking' && (
-             <div className="absolute inset-0 flex items-center justify-center gap-2">
-                <div className="w-1 h-12 bg-white/40 rounded-full animate-pulse"></div>
-                <div className="w-1 h-20 bg-white/60 rounded-full animate-pulse delay-75"></div>
-                <div className="w-1 h-12 bg-white/40 rounded-full animate-pulse delay-150"></div>
-             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Transcript & Response Area */}
-      <div className="absolute bottom-32 inset-x-0 px-6 flex flex-col items-center text-center z-10">
-        {transcript && (
-          <div className="mb-4 max-w-sm">
-            <p className="text-white/90 text-lg font-medium drop-shadow-md">
-              "{transcript}"
-            </p>
+      {!started ? (
+        <section className="relative z-10 min-h-[78vh] flex items-center justify-center px-6">
+          <div className="max-w-md text-center bg-black/45 backdrop-blur-xl border border-white/15 rounded-3xl p-7">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-amber-300 to-orange-500 flex items-center justify-center text-black"><Camera size={30} /></div>
+            <h2 className="text-2xl font-bold mt-5">Khám phá Huế ngay trước mắt</h2>
+            <p className="text-white/70 text-sm leading-6 mt-3">Hướng camera vào công trình, hiện vật hoặc bảng tên. Live Guide đối chiếu với kho dữ liệu đã kiểm chứng để kể chuyện và đưa mẹo thực tế.</p>
+            <div className="grid grid-cols-2 gap-2 mt-5 text-left text-xs text-white/75"><span className="bg-white/10 rounded-xl p-3">👁 Nhận diện có kiểm chứng</span><span className="bg-white/10 rounded-xl p-3">📖 Kể chuyện theo ngữ cảnh</span><span className="bg-white/10 rounded-xl p-3">🎒 Giờ, giá và mẹo</span><span className="bg-white/10 rounded-xl p-3">🧭 Gợi ý điểm tiếp theo</span></div>
+            <button onClick={startGuide} disabled={starting} className="w-full mt-6 py-3.5 bg-white text-gray-950 font-bold rounded-full disabled:opacity-60">{starting ? 'Đang mở camera…' : 'Bắt đầu Live Guide'}</button>
+            <p className="text-[11px] text-white/45 mt-3">Camera và vị trí chỉ được xin quyền sau khi bạn bấm bắt đầu.</p>
+            {error && <p className="text-sm text-red-200 bg-red-500/20 rounded-xl p-3 mt-4">{error}</p>}
           </div>
-        )}
-        
-        {aiResponse && (
-          <div className="max-w-md bg-black/60 backdrop-blur-lg border border-white/10 rounded-2xl p-5 shadow-2xl">
-            <div className="flex items-center gap-2 mb-2">
-              <Volume2 className="w-4 h-4 text-[#D4AF37]" />
-              <span className="text-xs font-semibold text-[#D4AF37] uppercase tracking-wider">AI Guide</span>
-            </div>
-            <p className="text-white/90 text-sm leading-relaxed text-left">
-              {aiResponse}
-            </p>
-          </div>
-        )}
-      </div>
+        </section>
+      ) : (
+        <>
+          <section className="relative z-10 px-4 pt-2">
+            <div className="flex gap-2 overflow-x-auto pb-2">{MODES.map(item => <button key={item.key} onClick={() => setMode(item.key)} className={`shrink-0 px-3 py-2 rounded-full text-xs font-semibold border ${mode === item.key ? 'bg-white text-gray-950 border-white' : 'bg-black/35 border-white/20'}`}>{item.label}</button>)}</div>
+            <div className="mt-3 flex items-center gap-2 text-xs text-white/75"><MapPin size={14} className="text-amber-300" /><span>{location ? 'Đã dùng vị trí để tìm dữ liệu gần bạn' : 'Chưa có vị trí — vẫn có thể nhận diện bằng ảnh'}</span>{weather && <span className="ml-auto">{weather.condition_emoji} {weather.temp}°C</span>}</div>
+          </section>
 
-      {/* Controls */}
-      <div className="absolute bottom-10 inset-x-0 flex justify-center z-20">
-        <button 
-          onClick={toggleRecording}
-          disabled={status === 'analyzing' || status === 'speaking'}
-          className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-[0_0_30px_rgba(0,0,0,0.5)]
-            ${isRecording ? 'bg-red-500 scale-110' : 'bg-white/10 backdrop-blur-md border-2 border-white/30 hover:bg-white/20 hover:scale-105'}
-            ${(status === 'analyzing' || status === 'speaking') ? 'opacity-50 cursor-not-allowed' : ''}
-          `}
-        >
-          {isRecording ? (
-            <Square className="w-8 h-8 text-white fill-white" />
-          ) : (
-            <Mic className="w-8 h-8 text-white" />
-          )}
-        </button>
-      </div>
-    </div>
+          <section className="relative z-10 min-h-[42vh] flex items-center justify-center pointer-events-none">
+            <div className={`w-64 h-64 rounded-3xl border-2 ${status === 'analyzing' ? 'border-amber-300 animate-pulse' : 'border-white/35'} relative`}><span className="absolute -top-7 left-0 text-xs text-white/65">Đặt chủ thể vào khung</span><span className="absolute inset-0 m-auto w-2 h-2 bg-amber-300 rounded-full" /></div>
+          </section>
+
+          <section className="relative z-20 px-4 pb-32 space-y-3">
+            {(reply || transcript || error) && <div className="bg-black/65 backdrop-blur-xl border border-white/15 rounded-2xl p-4">
+              {transcript && <p className="text-xs text-white/50 mb-2">Bạn hỏi: “{transcript}”</p>}
+              {reply && <p className="text-sm leading-6">{reply}</p>}
+              {error && <p className="text-sm text-red-200">{error}</p>}
+              {nearby.length > 0 && <div className="mt-3 pt-3 border-t border-white/10"><p className="text-[10px] uppercase tracking-widest text-amber-300 mb-2">Dữ liệu gần bạn</p><div className="flex gap-2 overflow-x-auto">{nearby.slice(0, 3).map(place => <span key={place.id} className="shrink-0 text-xs px-3 py-2 bg-white/10 rounded-lg">{place.name}{place.distance_km != null ? ` · ${place.distance_km.toFixed(1)} km` : ''}</span>)}</div></div>}
+            </div>}
+            <div className="grid grid-cols-2 gap-2">{MODES.map(item => <button key={item.key} onClick={() => { setMode(item.key); analyze(item.prompt, item.key); }} disabled={status !== 'idle'} className="bg-black/50 backdrop-blur border border-white/15 rounded-xl p-3 text-left text-xs font-semibold disabled:opacity-50">{item.label}</button>)}</div>
+          </section>
+
+          <div className="fixed bottom-6 inset-x-0 z-30 flex justify-center">
+            <button onClick={status === 'listening' ? stopListening : startListening} disabled={status === 'analyzing' || status === 'speaking'} className={`w-20 h-20 rounded-full border-4 border-white/30 shadow-2xl flex items-center justify-center ${status === 'listening' ? 'bg-red-500' : status === 'analyzing' ? 'bg-amber-400 text-black animate-pulse' : 'bg-white text-gray-950'} disabled:opacity-70`}>
+              {status === 'listening' ? <MicOff size={30} /> : status === 'analyzing' ? <Sparkles size={30} /> : <Mic size={30} />}
+            </button>
+          </div>
+        </>
+      )}
+    </main>
   );
 }

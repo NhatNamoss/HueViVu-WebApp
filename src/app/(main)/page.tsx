@@ -296,7 +296,7 @@ export default function HomePage() {
           </h2>
         </div>
         <div className="day-rhythm-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
-          {dayRhythm.map((item, i) => {
+          {dayRhythm.map(item => {
             const isCurrentTime = (
               (item.time === 'Sáng' && hour >= 5 && hour < 10) ||
               (item.time === 'Trưa' && hour >= 10 && hour < 14) ||
@@ -417,33 +417,39 @@ export default function HomePage() {
       {/* ── CTA ──────────────────────────────────────────── */}
       <section className="section" style={{ marginBottom: 100 }}>
         <div style={{
-          background: 'linear-gradient(135deg, var(--coral), var(--warm-orange))',
-          borderRadius: 'var(--radius-xl)', padding: '28px 22px',
-          textAlign: 'center',
-          boxShadow: 'var(--shadow-glow-lg)',
+          background: 'linear-gradient(145deg, #FFF8E8 0%, #FFE8D6 55%, #FFD4C7 100%)',
+          borderRadius: 'var(--radius-xl)', padding: '24px 22px 22px',
+          textAlign: 'left', border: '1px solid rgba(255,127,107,.2)',
+          boxShadow: '0 14px 40px rgba(160,90,50,.14)',
           position: 'relative', overflow: 'hidden',
         }}>
-          <div style={{ position: 'absolute', top: -40, right: -40, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
-          <div style={{ position: 'absolute', bottom: -30, left: -20, width: 100, height: 100, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
-          <span className="animate-sparkle" style={{ fontSize: '2rem', display: 'block', marginBottom: 10 }}>✨</span>
+          <div style={{ position: 'absolute', top: -52, right: -38, width: 150, height: 150, borderRadius: '50%', background: 'rgba(255,127,107,.13)' }} />
+          <div style={{ position: 'absolute', top: '50%', left: -13, width: 26, height: 26, borderRadius: '50%', background: 'var(--soft-white)', transform: 'translateY(-50%)', borderRight: '1px solid rgba(255,127,107,.16)' }} />
+          <div style={{ position: 'absolute', top: '50%', right: -13, width: 26, height: 26, borderRadius: '50%', background: 'var(--soft-white)', transform: 'translateY(-50%)', borderLeft: '1px solid rgba(255,127,107,.16)' }} />
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 'var(--radius-full)', background: 'rgba(255,127,107,.12)', color: 'var(--coral)', fontSize: '.67rem', fontWeight: 800, letterSpacing: '.08em' }}>🎟️ COUPON ƯU ĐÃI ĐỊA PHƯƠNG</span>
+            <span style={{ fontSize: '1.8rem' }}>🏮</span>
+          </div>
           <h3 style={{
-            fontSize: '1.25rem', fontWeight: 600,
-            color: 'white', marginBottom: 8,
+            position: 'relative', fontSize: '1.35rem', fontWeight: 800,
+            color: 'var(--navy)', marginBottom: 8, lineHeight: 1.35,
             }}>
-            "Để AI lắng nghe và dệt nên chuyến đi của bạn"
+            Để HueViVu dẫn bạn đi Huế
           </h3>
-          <p style={{ fontSize: '0.875rem', color: 'rgba(255,255,255,0.82)', marginBottom: 18, lineHeight: 1.55 }}>
-            Trả lời vài câu hỏi nhỏ. AI sẽ tạo lịch trình Huế hoàn toàn riêng cho bạn.
+          <p style={{ position: 'relative', fontSize: '0.875rem', color: 'var(--navy-muted)', marginBottom: 16, lineHeight: 1.6 }}>
+            HueViVu hứa sẽ mở khóa cho bạn những ưu đãi mà chỉ dân Huế mới có — được gợi ý theo đúng hành trình của bạn.
           </p>
+          <div style={{ position: 'relative', borderTop: '1.5px dashed rgba(255,127,107,.35)', margin: '0 -4px 16px' }} />
           <Link href="/flow" className="btn-ripple" style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            background: 'white', color: 'var(--coral)',
-            padding: '13px 26px', borderRadius: 'var(--radius-full)',
-            fontWeight: 700, fontSize: '0.9375rem',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+            position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            background: 'linear-gradient(135deg, var(--coral), var(--warm-orange))', color: 'white',
+            padding: '13px 20px', borderRadius: 'var(--radius-full)',
+            fontWeight: 800, fontSize: '0.9rem',
+            boxShadow: '0 7px 20px rgba(255,127,107,.28)',
           }}>
-            Bắt đầu ngay →
+            Nhận coupon & bắt đầu hành trình →
           </Link>
+          <p style={{ position: 'relative', margin: '10px 0 0', textAlign: 'center', fontSize: '.65rem', color: 'var(--navy-muted)' }}>Miễn phí tạo lịch trình · Ưu đãi xuất hiện khi có đối tác phù hợp</p>
         </div>
       </section>
     </>

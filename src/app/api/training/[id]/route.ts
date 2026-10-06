@@ -1,8 +1,11 @@
 import { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
+import { requireAdmin } from '@/lib/auth';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const admin = requireAdmin(req);
+    if (admin instanceof Response) return admin;
     const db = getDb();
     const example = db.prepare('SELECT * FROM training_examples WHERE id = ?').get(params.id);
     if (!example) return Response.json({ error: 'Not found' }, { status: 404 });
@@ -14,6 +17,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const admin = requireAdmin(req);
+    if (admin instanceof Response) return admin;
     const db = getDb();
     const data = await req.json();
 
@@ -41,6 +46,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const admin = requireAdmin(req);
+    if (admin instanceof Response) return admin;
     const db = getDb();
     db.prepare('DELETE FROM training_examples WHERE id = ?').run(params.id);
     return Response.json({ message: 'Deleted successfully' });

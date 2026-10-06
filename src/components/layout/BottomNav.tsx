@@ -6,8 +6,8 @@ const navItems = [
   {
     href: '/',
     label: 'Trang chủ',
-    icon: (active: boolean) => (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill={active ? 'none' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    icon: () => (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
         <polyline points="9 22 9 12 15 12 15 22" />
       </svg>
@@ -16,7 +16,7 @@ const navItems = [
   {
     href: '/explore',
     label: 'Khám phá',
-    icon: (active: boolean) => (
+    icon: () => (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
       </svg>
@@ -25,7 +25,7 @@ const navItems = [
   {
     href: '/flow',
     label: 'Lên kế hoạch',
-    icon: (active: boolean) => (
+    icon: () => (
       <div style={{
         width: 44, height: 44,
         background: 'linear-gradient(135deg, #FF7F6B, #FF9A5C)',
@@ -45,7 +45,7 @@ const navItems = [
   {
     href: '/trips',
     label: 'Chuyến đi',
-    icon: (active: boolean) => (
+    icon: () => (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
         <polyline points="14 2 14 8 20 8" />
@@ -57,7 +57,7 @@ const navItems = [
   {
     href: '/profile',
     label: 'Cá nhân',
-    icon: (active: boolean) => (
+    icon: () => (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
         <circle cx="12" cy="7" r="4" />
@@ -77,10 +77,12 @@ export default function BottomNav() {
           <Link
             key={item.href}
             href={item.href}
+            aria-label={item.label}
+            title={item.label}
             className={`nav-item ${isActive ? 'active' : ''} ${item.isCenter ? 'nav-item-center' : ''}`}
             style={item.isCenter ? { flexShrink: 0 } : {}}
           >
-            {item.icon(isActive)}
+            {item.icon()}
             {!item.isCenter && <span>{item.label}</span>}
             {item.isCenter && <span className="nav-center-label">{item.label}</span>}
           </Link>

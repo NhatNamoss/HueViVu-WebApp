@@ -6,7 +6,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [mode, setMode] = useState<'intro' | 'login' | 'register'>('intro');
   const [email, setEmail] = useState('demo@huevivu.app');
-  const [password, setPassword] = useState('123456');
+  const [password, setPassword] = useState('demo123');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');

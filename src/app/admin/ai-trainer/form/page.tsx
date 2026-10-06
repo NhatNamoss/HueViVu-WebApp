@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { authenticatedHeaders } from '@/lib/client-auth';
 
 function AITrainerFormInner() {
   const router = useRouter();
@@ -21,7 +22,7 @@ function AITrainerFormInner() {
 
   useEffect(() => {
     if (id) {
-      fetch(`/api/training/${id}`)
+      fetch(`/api/training/${id}`, { headers: authenticatedHeaders() })
         .then(res => res.json())
         .then(data => {
           if (!data.error) {
@@ -53,7 +54,7 @@ function AITrainerFormInner() {
 
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: authenticatedHeaders(true),
         body: JSON.stringify(formData)
       });
 

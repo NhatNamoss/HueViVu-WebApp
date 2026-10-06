@@ -1,4 +1,3 @@
-import { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
 import { generateToken } from '@/lib/auth';
 

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 const TOPICS = [
@@ -35,6 +35,7 @@ function BackHeader() {
 }
 
 export default function FeedbackPage() {
+  const [placeId, setPlaceId] = useState<string | null>(null);
   const [topic, setTopic] = useState('');
   const [message, setMessage] = useState('');
   const [email, setEmail] = useState('');
@@ -43,6 +44,12 @@ export default function FeedbackPage() {
   const [sending, setSending] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const nextPlaceId = params.get('placeId'); const placeName = params.get('placeName');
+    if (nextPlaceId) { setPlaceId(nextPlaceId); setTopic('content'); if (placeName) setMessage(`Thông tin cần kiểm tra tại ${placeName}: `); }
+  }, []);
+
   const handleSubmit = async () => {
     if (!topic || !message.trim()) return;
     setSending(true);
@@ -50,7 +57,7 @@ export default function FeedbackPage() {
       await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, message, email, rating }),
+        body: JSON.stringify({ topic, message, email, rating, placeId }),
       });
     } catch {}
     setSending(false);

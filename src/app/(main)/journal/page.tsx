@@ -25,7 +25,7 @@ export default function JournalPage() {
         setEntries(Array.isArray(data) ? data : []);
         setLoading(false);
       }).catch(() => setLoading(false));
-  }, []);
+  }, [router]);
 
   const handleSubmit = async () => {
     if (!newEntry.content.trim()) return;

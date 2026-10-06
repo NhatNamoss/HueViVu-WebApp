@@ -6,6 +6,7 @@ export async function GET(req: NextRequest) {
     if (!text) {
       return new Response('Missing text', { status: 400 });
     }
+    if (text.length > 200) return new Response('Text too long', { status: 400 });
 
     const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=vi&client=tw-ob`;
     

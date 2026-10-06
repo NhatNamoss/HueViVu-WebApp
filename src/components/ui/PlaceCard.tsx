@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useState, useCallback, useEffect } from 'react';
+import { trackEvent } from '@/lib/analytics';
 
 const categoryLabel: Record<string, string> = {
   heritage: 'DI TÍCH HUẾ',
@@ -21,6 +22,7 @@ export type PlaceCardProps = {
     price: string;
     img: string;
     duration?: string;
+    opening_status?: { status: 'open' | 'closing_soon' | 'closed' | 'unknown'; label: string };
   };
   layout?: 'horizontal' | 'grid';
 };
@@ -52,10 +54,12 @@ export default function PlaceCard({ place, layout = 'grid' }: PlaceCardProps) {
 
   const label = categoryLabel[place.category] || 'ĐỊA ĐIỂM';
   const cost = place.price || 'Chi phí tùy món';
+  const opening = place.opening_status;
 
   return (
     <Link
       href={`/places/${place.id}`}
+      onClick={() => trackEvent('view', { place_id: place.id, metadata: { surface: 'place_card', layout } })}
       className="place-card-link"
       style={isHorizontal ? { flexShrink: 0, width: 260 } : { display: 'block' }}
     >
@@ -73,7 +77,7 @@ export default function PlaceCard({ place, layout = 'grid' }: PlaceCardProps) {
           <button
             className="place-save-btn"
             aria-label={saved ? 'Bỏ lưu' : 'Lưu địa điểm'}
-            onClick={e => { e.preventDefault(); e.stopPropagation(); toggleSave(); }}
+            onClick={e => { e.preventDefault(); e.stopPropagation(); toggleSave(); trackEvent(saved ? 'unsave' : 'save', { place_id: place.id }); }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill={saved ? 'var(--coral)' : 'none'} stroke={saved ? 'var(--coral)' : 'white'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
@@ -105,6 +109,9 @@ export default function PlaceCard({ place, layout = 'grid' }: PlaceCardProps) {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
               {cost}
             </span>
+            {opening && <span className="place-card-meta-item" style={{ color: opening.status === 'open' ? '#15803D' : opening.status === 'closing_soon' ? '#B45309' : opening.status === 'closed' ? '#B91C1C' : 'var(--navy-muted)', fontWeight: 700 }}>
+              {opening.status === 'open' ? '●' : opening.status === 'closing_soon' ? '◐' : opening.status === 'closed' ? '○' : '·'} {opening.label}
+            </span>}
           </div>
 
           <span className="place-card-cta">Khám phá địa điểm →</span>

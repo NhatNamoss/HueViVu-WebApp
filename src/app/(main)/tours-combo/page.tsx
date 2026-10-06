@@ -22,7 +22,7 @@ export default function TourComboPage() {
   }, []);
 
   const featured = tours.filter(t => t.is_featured);
-  const themes = [...new Set(tours.map(t => t.theme))];
+  const themes = Array.from(new Set(tours.map(t => t.theme)));
   const filtered = activeTheme === 'all' ? tours : tours.filter(t => t.theme === activeTheme);
 
   return (

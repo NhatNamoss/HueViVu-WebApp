@@ -1,37 +1,39 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { authenticatedHeaders } from '@/lib/client-auth';
 
 export default function AITrainerPage() {
   const [examples, setExamples] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'chatbot' | 'live' | 'object'>('chatbot');
 
-  const fetchExamples = async () => {
+  const fetchExamples = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/training?source=${activeTab}`);
+      const res = await fetch(`/api/training?source=${activeTab}`, { headers: authenticatedHeaders() });
       const data = await res.json();
-      setExamples(data);
+      setExamples(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab]);
 
   useEffect(() => {
     fetchExamples();
-  }, [activeTab]);
+  }, [fetchExamples]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Bạn có chắc chắn muốn xóa mẫu dữ liệu này?')) return;
     try {
-      await fetch(`/api/training/${id}`, { method: 'DELETE' });
+      const response = await fetch(`/api/training/${id}`, { method: 'DELETE', headers: authenticatedHeaders() });
+      if (!response.ok) throw new Error('Không có quyền hoặc không thể xóa');
       setExamples(prev => prev.filter(e => e.id !== id));
       alert('Đã xóa thành công!');
-    } catch (err) {
+    } catch {
       alert('Xóa thất bại');
     }
   };

@@ -3,12 +3,10 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-const VIBE_TAGS = [
-  { label: '☕ Cà phê muối', color: 'rgba(245,158,11,0.12)', textColor: '#92400E' },
-  { label: '🚶 Đi bộ nhiều', color: 'rgba(107,143,113,0.12)', textColor: '#166534' },
-  { label: '🌅 Yên tĩnh buổi sáng', color: 'rgba(99,102,241,0.1)', textColor: '#3730A3' },
-  { label: '🏗️ Triều Nguyễn', color: 'rgba(255,127,107,0.1)', textColor: '#9A3412' },
-  { label: '🍜 Ẩm thực đường phố', color: 'rgba(255,154,92,0.12)', textColor: '#B45309' },
+const MEMORY_COLORS = [
+  ['rgba(245,158,11,0.12)', '#92400E'], ['rgba(107,143,113,0.12)', '#166534'],
+  ['rgba(99,102,241,0.1)', '#3730A3'], ['rgba(255,127,107,0.1)', '#9A3412'],
+  ['rgba(255,154,92,0.12)', '#B45309'],
 ];
 
 export default function ProfilePage() {
@@ -106,17 +104,19 @@ export default function ProfilePage() {
         <h3 className="section-title" style={{ marginBottom: 12 }}>🧠 AI nhớ về bạn</h3>
         <div className="card" style={{ padding: '16px' }}>
           <p style={{ fontSize: '0.8125rem', color: 'var(--navy-muted)', marginBottom: 12, lineHeight: 1.5 }}>
-            AI dùng những điều này để cá nhân hóa lịch trình
+            {user.ai_memory?.personalized
+              ? `Suy ra từ ${user.ai_memory.signal_count} tín hiệu trong lịch trình và tương tác của riêng bạn.`
+              : 'AI chưa có đủ dữ liệu. Các sở thích sẽ xuất hiện sau khi bạn tạo và sử dụng lịch trình.'}
           </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {VIBE_TAGS.map(tag => (
-              <span key={tag.label} style={{ padding: '6px 12px', background: tag.color, borderRadius: 'var(--radius-full)', fontSize: '0.8125rem', fontWeight: 600, color: tag.textColor }}>
-                {tag.label}
+          {user.ai_memory?.items?.length > 0 ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {user.ai_memory.items.map((item: any, index: number) => (
+              <span key={`${item.key}-${item.label}`} title={`${item.source} · ${item.evidence} tín hiệu`} style={{ padding: '6px 12px', background: MEMORY_COLORS[index % MEMORY_COLORS.length][0], borderRadius: 'var(--radius-full)', fontSize: '0.8125rem', fontWeight: 600, color: MEMORY_COLORS[index % MEMORY_COLORS.length][1] }}>
+                {item.emoji} {item.label}
               </span>
             ))}
-          </div>
+          </div> : <div style={{ padding: '14px', borderRadius: 'var(--radius-md)', background: 'rgba(26,29,59,.035)', color: 'var(--navy-muted)', fontSize: '.82rem', lineHeight: 1.5 }}>Tạo chuyến đầu tiên hoặc lưu vài địa điểm yêu thích để HueViVu hiểu bạn dần dần.</div>}
           <Link href="/flow" style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 14, fontSize: '0.8125rem', fontWeight: 600, color: 'var(--coral)' }}>
-            ✨ Cập nhật sở thích với AI
+            ✨ Tạo lịch trình theo sở thích
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>
           </Link>
         </div>

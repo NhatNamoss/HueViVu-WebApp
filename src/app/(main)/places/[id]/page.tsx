@@ -102,7 +102,7 @@ export default function PlaceDetailPage() {
 
 
   return (
-    <div style={{ paddingBottom: 120 }}>
+    <div className="place-detail-page">
       {/* Header */}
       <div style={{ position: 'relative', height: 320, overflow: 'hidden' }}>
         <img src={place.img || '/assets/citadel.png'} alt={place.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.target as HTMLImageElement).src = '/assets/citadel.png'; }} />
@@ -139,10 +139,11 @@ export default function PlaceDetailPage() {
         {place.address && <div style={{ marginBottom: 24 }}><h3 className="section-title">Vị trí</h3><div className="card" style={{ padding: '12px', marginTop: 8, display: 'flex', gap: 10, alignItems: 'center' }}><div style={{ width: 40, height: 40, borderRadius: 'var(--radius-sm)', background: 'rgba(26,29,59,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📍</div><p style={{ fontSize: '0.875rem', color: 'var(--navy)' }}>{place.address}</p></div></div>}
         {place.highlights?.length > 0 && <div style={{ marginBottom: 24 }}><h3 className="section-title">Điểm nổi bật</h3><ul style={{ paddingLeft: 20, marginTop: 8, color: 'var(--navy-muted)', fontSize: '0.9375rem', lineHeight: 1.6 }}>{place.highlights.map((h: string, i: number) => <li key={i} style={{ marginBottom: 6 }}>{h}</li>)}</ul></div>}
         {place.tips?.length > 0 && <div style={{ background: 'rgba(255,127,107,0.06)', border: '1px solid rgba(255,127,107,0.15)', borderRadius: 'var(--radius-md)', padding: '16px' }}><h3 style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--coral)', marginBottom: 8 }}>✨ Lời khuyên từ AI</h3><ul style={{ paddingLeft: 20, color: 'var(--navy)', fontSize: '0.875rem', lineHeight: 1.6 }}>{place.tips.map((t: string, i: number) => <li key={i} style={{ marginBottom: 6 }}>{t}</li>)}</ul></div>}
+        <Link href={`/profile/feedback?placeId=${place.id}&placeName=${encodeURIComponent(place.name)}`} style={{ marginTop: 16, padding: '11px 14px', border: '1px solid rgba(26,29,59,.08)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: 'var(--navy-muted)', fontSize: '.8rem', fontWeight: 600 }}><span>Thông tin địa điểm chưa đúng?</span><span style={{ color: 'var(--coral)' }}>Báo cho HueViVu ›</span></Link>
       </div>
 
       {/* Sticky CTA */}
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '16px 20px 28px', background: 'var(--soft-white)', borderTop: '1px solid rgba(26,29,59,0.08)', display: 'flex', gap: 10, zIndex: 30 }}>
+      <div className="place-sticky-cta">
         <a href={`https://www.google.com/maps/dir/?api=1&destination=${place.lat || HUE_LAT},${place.lng || HUE_LNG}&travelmode=walking`} target="_blank" rel="noreferrer" className="btn-secondary" style={{ flex: 1, textAlign: 'center', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>🗺️ Chỉ đường</a>
         <button onClick={() => setAddOpen(true)} className="btn-primary" style={{ flex: 2 }}>➕ Thêm vào lịch trình</button>
       </div>

@@ -1,10 +1,11 @@
 const Database = require('better-sqlite3');
 
-const base = process.env.TEST_BASE_URL || 'http://localhost:3100';
+const base = process.env.TEST_BASE_URL || 'http://localhost:3000';
 const marker = `codex_smoke_${Date.now()}`;
 const db = new Database('data/huevivu.db');
 let passed = 0;
 let failed = 0;
+const guestIds = new Set();
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -24,7 +25,7 @@ function headers(token, json = false) {
   return { ...(json ? { 'content-type': 'application/json' } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}) };
 }
 function cleanup() {
-  const users = db.prepare('SELECT id FROM users WHERE email LIKE ? OR id LIKE ?').all(`%${marker}%`, `guest_${marker}%`).map(row => row.id);
+  const users = [...new Set([...db.prepare('SELECT id FROM users WHERE email LIKE ? OR id LIKE ?').all(`%${marker}%`, `guest_${marker}%`).map(row => row.id), ...guestIds])];
   const trips = users.length ? db.prepare(`SELECT id FROM trips WHERE user_id IN (${users.map(() => '?').join(',')})`).all(...users).map(row => row.id) : [];
   const places = db.prepare('SELECT id FROM places WHERE name LIKE ?').all(`${marker}%`).map(row => row.id);
   const transaction = db.transaction(() => {
@@ -72,10 +73,26 @@ function cleanup() {
   let roleUserId = '';
   let rolePlaceId = '';
   try {
+    await test('essential pages, health and installation icons are reachable', async () => {
+      for (const path of ['/', '/onboarding', '/flow', '/explore', '/trips', '/profile/feedback', '/profile/privacy', '/live', '/api/health', '/icon-192x192.png', '/icon-512x512.png']) {
+        const result = await request(path);
+        assert(result.response.status === 200, `${path}: ${result.response.status}`);
+      }
+      const missing = await request('/missing-smoke-page');
+      assert(missing.response.status === 404 && String(missing.body).includes('Không tìm thấy trang'), 'missing page has no useful recovery');
+    });
     await test('public place list and canonical categories', async () => {
       const { response, body } = await request('/api/places');
       assert(response.status === 200 && Array.isArray(body), 'place list unavailable');
       assert(body.every(place => /^[a-z_]+$/.test(place.category)), 'legacy category remains');
+    });
+    await test('Live Guide fallback does not pretend to recognize an image', async () => {
+      const result = await request('/api/vision', { method: 'POST', headers: headers('', true), body: JSON.stringify({ image: 'data:image/jpeg;base64,AA==', mode: 'identify' }) });
+      if (result.body?.source === 'catalog-fallback') {
+        assert(result.response.ok && result.body.reply.includes('chưa xác định được nội dung ảnh'), 'catalog reply implies image recognition');
+      } else {
+        assert(result.response.status >= 400, 'configured vision service accepted an invalid image');
+      }
     });
     await test('invalid place category is rejected', async () => {
       const { response } = await request('/api/places?category=not-valid'); assert(response.status === 400, `expected 400, got ${response.status}`);
@@ -88,11 +105,19 @@ function cleanup() {
       ]);
       assert(checks.every(item => item.response.status === 401), checks.map(item => item.response.status).join(','));
     });
-    await test('demo account has admin role', async () => {
-      let result = await request('/api/auth/demo', { method: 'POST' });
-      assert(result.response.ok && result.body.token, 'demo login failed'); adminToken = result.body.token;
-      result = await request('/api/auth/me', { headers: headers(adminToken) });
-      assert(result.body.role === 'admin', 'demo user is not admin');
+    await test('public demo routes cannot grant administrator access', async () => {
+      for (const path of ['/api/auth/demo', '/api/auth/me']) {
+        const result = await request(path, { method: 'POST' });
+        assert(result.response.status === 410 && !result.body.token, `${path} still grants demo access`);
+      }
+      const result = await request('/api/auth/login', { method: 'POST', headers: headers('', true), body: JSON.stringify({ email: 'demo@huevivu.app', password: 'demo123' }) });
+      assert(result.response.status === 401, 'known demo password still works');
+    });
+    await test('isolated administrator fixture', async () => {
+      const result = await request('/api/auth/register', { method: 'POST', headers: headers('', true), body: JSON.stringify({ name: 'Smoke Admin', email: `${marker}_admin@example.com`, password: 'secret12' }) });
+      assert(result.response.ok && result.body.token, 'fixture registration failed');
+      db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(result.body.user.id);
+      adminToken = result.body.token;
     });
     await test('registration validates and normalizes email', async () => {
       let result = await request('/api/auth/register', { method: 'POST', headers: headers('', true), body: JSON.stringify({ name: 'T', email: 'bad', password: '1' }) });
@@ -149,6 +174,8 @@ function cleanup() {
       assert(result.body.feasibility?.score >= 70, `new trip failed quality gate: ${result.body.feasibility?.score}`);
       assert(result.body.trip.days.every(day => day.activities.length <= 7), 'new trip is overloaded');
       tripId = result.body.tripId; guestToken = result.body.token;
+      const identity = await request('/api/auth/me', { headers: headers(guestToken) });
+      guestIds.add(identity.body.id);
       result = await request(`/api/trips/${tripId}`); assert(result.response.status === 404, 'private trip leaked');
       result = await request(`/api/trips/${tripId}`, { headers: headers(guestToken) }); assert(result.response.ok, 'owner cannot read trip');
       result = await request(`/api/trips/${tripId}/adapt`, { method: 'POST', headers: headers('', true), body: JSON.stringify({ scenario: 'late', dayIndex: 0 }) }); assert(result.response.status === 401, 'anonymous adaptation accepted');
@@ -160,6 +187,58 @@ function cleanup() {
       const afterPreview = await request(`/api/trips/${tripId}`, { headers: headers(guestToken) });
       assert(JSON.stringify(beforePreview.body.itinerary) === JSON.stringify(afterPreview.body.itinerary), 'preview modified the saved itinerary');
       result = await request(`/api/trips/${tripId}/optimize`, { method: 'POST', headers: headers(guestToken, true) }); assert(result.response.ok && result.body.feasibility.score >= scoreBeforeOptimize, 'feasibility optimizer did not preserve or improve score');
+    });
+    await test('guest session replay cannot recover another identity', async () => {
+      const result = await request('/api/trips', { method: 'POST', headers: headers('', true), body: JSON.stringify({ duration: 1, styles: ['Ẩm thực'], companion: 'solo', budget: 300, sessionId: marker }) });
+      assert(result.response.ok && result.body.token, 'second guest trip failed');
+      const identity = await request('/api/auth/me', { headers: headers(result.body.token) });
+      guestIds.add(identity.body.id);
+      const original = await request('/api/auth/me', { headers: headers(guestToken) });
+      assert(identity.body.id !== original.body.id, 'session replay recovered first guest');
+      const forbidden = await request(`/api/trips/${tripId}`, { headers: headers(result.body.token) });
+      assert(forbidden.response.status === 404, 'second guest read private trip');
+    });
+    await test('invalid trip requests do not create records', async () => {
+      const payload = { duration: 1, styles: ['Ẩm thực'], companion: 'solo', budget: 300 };
+      for (const invalid of [{ duration: 0 }, { duration: 100 }, { styles: [] }, { budget: -1 }, { companion: 'invalid' }, { startDate: '2026-02-30' }, { startLat: 100, startLng: 107 }, { food: {} }]) {
+        const result = await request('/api/trips', { method: 'POST', headers: headers('', true), body: JSON.stringify({ ...payload, ...invalid }) });
+        assert(result.response.status === 400, `invalid request accepted: ${JSON.stringify(invalid)}`);
+      }
+      const expired = await request('/api/trips', { method: 'POST', headers: headers('invalid-token', true), body: JSON.stringify(payload) });
+      assert(expired.response.status === 401, 'invalid token silently became a guest');
+    });
+    await test('adaptation preview preserves saved itinerary and detects conflicts', async () => {
+      const before = await request(`/api/trips/${tripId}`, { headers: headers(guestToken) });
+      const preview = await request(`/api/trips/${tripId}/adapt`, { method: 'POST', headers: headers(guestToken, true), body: JSON.stringify({ scenario: 'late', dayIndex: 0, delayMinutes: 30, currentTime: '07:00', preview: true }) });
+      assert(preview.response.ok && preview.body.preview, 'adaptation preview unavailable');
+      const after = await request(`/api/trips/${tripId}`, { headers: headers(guestToken) });
+      assert(JSON.stringify(before.body.itinerary) === JSON.stringify(after.body.itinerary), 'preview changed saved trip');
+      const conflict = await request(`/api/trips/${tripId}/adapt`, { method: 'POST', headers: headers(guestToken, true), body: JSON.stringify({ scenario: 'late', dayIndex: 0, expectedItinerary: '{}', currentTime: '07:00' }) });
+      assert(conflict.response.status === 409, 'stale preview overwrote itinerary');
+      const apply = await request(`/api/trips/${tripId}/adapt`, { method: 'POST', headers: headers(guestToken, true), body: JSON.stringify({ scenario: 'late', dayIndex: 0, delayMinutes: 30, currentTime: '07:00', expectedItinerary: preview.body.expectedItinerary }) });
+      assert(apply.response.ok, 'confirmed adaptation failed');
+      const saved = await request(`/api/trips/${tripId}`, { headers: headers(guestToken) });
+      const noChange = await request(`/api/trips/${tripId}/adapt`, { method: 'POST', headers: headers(guestToken, true), body: JSON.stringify({ scenario: 'late', dayIndex: 0, delayMinutes: 30, currentTime: '23:59' }) });
+      assert(noChange.response.ok && noChange.body.changed === false && noChange.body.changes.length === 0, 'finished day claimed a delay');
+      const unchanged = await request(`/api/trips/${tripId}`, { headers: headers(guestToken) });
+      assert(JSON.stringify(saved.body.itinerary) === JSON.stringify(unchanged.body.itinerary), 'no-op changed saved history');
+    });
+    await test('representative trip lengths and pacing stay usable', async () => {
+      for (const [duration, pacing] of [[1, 'relaxed'], [3, 'balanced'], [5, 'relaxed'], [7, 'packed']]) {
+        const result = await request('/api/trips', { method: 'POST', headers: headers('', true), body: JSON.stringify({ duration, pacing, styles: ['Ẩm thực', 'Di sản'], companion: 'family', budget: 600, startDate: '2026-10-07' }) });
+        assert(result.response.ok && result.body.token, `generation failed: ${duration}/${pacing}`);
+        const identity = await request('/api/auth/me', { headers: headers(result.body.token) });
+        guestIds.add(identity.body.id);
+        assert(result.body.trip.days.length === duration && result.body.trip.days.every(day => day.activities.length > 0), `empty or missing day: ${duration}/${pacing}`);
+        assert(result.body.feasibility.score >= 70, `quality gate: ${duration}/${pacing} score=${result.body.feasibility.score}`);
+        assert(result.body.trip.days.every(day => day.activities.length <= (pacing === 'relaxed' ? 7 : 9)), `overloaded: ${duration}/${pacing}`);
+        const candidate = await request(`/api/trips/${result.body.tripId}/adapt`, { method: 'POST', headers: headers(result.body.token, true), body: JSON.stringify({ scenario: 'tired', dayIndex: 0, currentTime: '07:00', preview: true }) });
+        assert(candidate.response.ok, 'adaptation candidate unavailable');
+        for (const day of candidate.body.itinerary.days) for (const activity of day.activities) if (activity.place_id) {
+          const place = db.prepare('SELECT publication_status FROM places WHERE id = ?').get(activity.place_id);
+          assert(place?.publication_status === 'published', 'adaptation leaked a draft place');
+        }
+      }
     });
     await test('journal CRUD respects owner', async () => {
       let result = await request('/api/journal', { method: 'POST', headers: headers(userToken, true), body: JSON.stringify({ content: marker, mood: 'happy' }) });
@@ -181,6 +260,8 @@ function cleanup() {
       result = await request(`/api/places/${placeId}`, { method: 'DELETE', headers: headers(adminToken) }); assert(result.response.ok, 'place delete failed'); placeId = '';
     });
     await test('feedback submission is public but listing is admin-only', async () => {
+      const invalid = await request('/api/feedback', { method: 'POST', headers: headers('', true), body: JSON.stringify({ topic: 'bug', message: {}, rating: 6 }) });
+      assert(invalid.response.status === 400, 'invalid feedback accepted');
       let result = await request('/api/places'); const feedbackPlaceId = result.body[0]?.id;
       result = await request('/api/feedback', { method: 'POST', headers: headers(userToken, true), body: JSON.stringify({ topic: 'content', message: marker, rating: 2, placeId: feedbackPlaceId }) }); assert(result.response.ok, 'feedback post failed');
       result = await request('/api/feedback'); assert(result.response.status === 401, 'feedback list leaked');

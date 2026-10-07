@@ -69,6 +69,8 @@ function ExploreInner() {
   const searchParams = useSearchParams();
   const [places, setPlaces] = useState<Place[]>([]);
   const [loading, setLoading] = useState(true);
+  const [placesError, setPlacesError] = useState('');
+  const [retry, setRetry] = useState(0);
   const [category, setCategory] = useState('all');
   const [activeMood, setActiveMood] = useState('all');
   const [q, setQ] = useState('');
@@ -120,16 +122,22 @@ function ExploreInner() {
   };
 
   useEffect(() => {
-    fetch('/api/weather').then(r => r.json()).then(setWeather).catch(() => {});
+    fetch('/api/weather').then(r => r.json()).then(data => setWeather(data._fallback ? null : data)).catch(() => {});
   }, []);
 
   useEffect(() => {
-    setLoading(true);
+    const controller = new AbortController();
+    setLoading(true); setPlacesError('');
     const params = new URLSearchParams();
     if (category !== 'all') params.set('category', category);
     if (q.trim()) params.set('q', q.trim());
-    fetch('/api/places?' + params).then(r => r.json()).then(data => { setPlaces(data); setLoading(false); });
-  }, [category, q]);
+    fetch('/api/places?' + params, { signal: controller.signal })
+      .then(async r => { if (!r.ok) throw new Error(); const data = await r.json(); if (!Array.isArray(data)) throw new Error(); return data; })
+      .then(data => setPlaces(data))
+      .catch(() => { if (!controller.signal.aborted) setPlacesError('Chưa tải được địa điểm. Kiểm tra mạng rồi thử lại; lựa chọn tìm kiếm vẫn được giữ.'); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [category, q, retry]);
 
   const locateMe = () => {
     navigator.geolocation?.getCurrentPosition(
@@ -247,6 +255,7 @@ function ExploreInner() {
           <span style={{ fontSize: '0.8125rem', color: 'var(--navy-muted)' }}>{visiblePlaces.length} nơi</span>
         </div>
 
+        {placesError && <div role="alert" style={{ padding: 16 }}><p>{placesError}</p><button className="btn-secondary" onClick={() => setRetry(value => value + 1)}>Thử tải lại</button></div>}
         {loading ? (
           <div className="places-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {Array.from({ length: 6 }).map((_, i) => (

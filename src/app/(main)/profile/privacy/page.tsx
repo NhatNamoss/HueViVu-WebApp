@@ -13,13 +13,13 @@ const SECTIONS = [
     ],
   },
   {
-    title: 'Chúng tôi KHÔNG thu thập',
+    title: 'Quyền thiết bị và dịch vụ xử lý',
     icon: '🚫',
     items: [
-      { label: 'Vị trí GPS thời gian thực', detail: 'Ứng dụng không theo dõi vị trí của bạn khi dùng.' },
+      { label: 'Vị trí tùy chọn', detail: 'Nếu bạn cấp quyền, vị trí được dùng để gợi ý điểm gần bạn và sắp xếp tuyến đi. Bạn có thể từ chối và vẫn dùng lịch trình.' },
       { label: 'Thông tin thanh toán', detail: 'Chúng tôi không xử lý bất kỳ giao dịch tài chính nào.' },
-      { label: 'Dữ liệu bên thứ ba', detail: 'Không chia sẻ dữ liệu với quảng cáo hoặc bên thứ ba.' },
-      { label: 'Danh bạ / camera', detail: 'Không yêu cầu quyền truy cập thiết bị nhạy cảm.' },
+      { label: 'Dịch vụ xử lý câu hỏi', detail: 'Khi dùng trợ lý hoặc Live Guide, câu hỏi, nội dung chuyến đi, ảnh và vị trí liên quan có thể được gửi tới nhà cung cấp AI được cấu hình để tạo câu trả lời.' },
+      { label: 'Camera và giọng nói', detail: 'Live Guide xin quyền camera sau khi bạn bấm bắt đầu. Giọng nói chỉ được bật khi bạn chọn nói; bạn có thể dùng các nút hỏi thay thế. Ứng dụng không yêu cầu danh bạ.' },
     ],
   },
   {
@@ -28,7 +28,7 @@ const SECTIONS = [
     items: [
       { label: 'Cá nhân hóa AI', detail: 'Sở thích của bạn giúp AI đề xuất lịch trình, địa điểm phù hợp hơn.' },
       { label: 'Cải thiện ứng dụng', detail: 'Dữ liệu ẩn danh giúp chúng tôi hiểu tính năng nào hữu ích nhất.' },
-      { label: 'Bảo mật tài khoản', detail: 'Email dùng để xác thực và khôi phục tài khoản khi cần.' },
+      { label: 'Bảo mật tài khoản', detail: 'Email và mật khẩu dùng để đăng nhập tài khoản. Bản dùng thử chưa có chức năng khôi phục mật khẩu qua email.' },
     ],
   },
   {
@@ -36,7 +36,7 @@ const SECTIONS = [
     icon: '✅',
     items: [
       { label: 'Xem dữ liệu', detail: 'Bạn có thể xem tất cả dữ liệu cá nhân qua ứng dụng bất kỳ lúc nào.' },
-      { label: 'Chỉnh sửa thông tin', detail: 'Cập nhật tên, email trong phần cài đặt tài khoản.' },
+      { label: 'Chỉnh sửa thông tin', detail: 'Nếu cần sửa thông tin tài khoản, hãy gửi yêu cầu qua mục Góp ý & Hỗ trợ.' },
       { label: 'Xóa tài khoản', detail: 'Gửi yêu cầu xóa toàn bộ dữ liệu qua mục Góp ý & Hỗ trợ.' },
       { label: 'Xuất dữ liệu', detail: 'Yêu cầu xuất lịch trình và dữ liệu cá nhân dạng file qua mục Hỗ trợ.' },
     ],

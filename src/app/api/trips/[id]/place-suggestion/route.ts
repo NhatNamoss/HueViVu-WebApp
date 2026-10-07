@@ -3,7 +3,8 @@ import { getAuthUserId } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { suggestTripInsertion } from '@/lib/trip-insertion';
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   const userId = getAuthUserId(req);
   if (!userId) return Response.json({ error: 'Cần đăng nhập' }, { status: 401 });
 

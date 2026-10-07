@@ -14,7 +14,8 @@ function overview(feasibility: any) {
   if (closed) return { title: 'Một số điểm có thể đóng cửa khi bạn đến', detail: `HueViVu tìm thấy ${closed} điểm chưa khớp giờ mở cửa.`, tone: 'risk' };
   if (conflicts) return { title: 'Bạn chưa có đủ thời gian giữa các điểm', detail: `${conflicts} chặng chưa tính đủ thời gian tham quan, nghỉ và di chuyển.`, tone: 'risk' };
   if (feasibility.score < 85) return { title: 'Lịch trình có thể đi, nhưng sẽ hơi vội', detail: `Có ${feasibility.issue_count} điều nên chỉnh để chuyến đi nhẹ nhàng hơn.`, tone: 'caution' };
-  return { title: 'Lịch trình đã sẵn sàng để đi', detail: 'Thời gian tham quan, nghỉ và di chuyển đang ở mức hợp lý.', tone: 'good' };
+  if (issues.some((issue: any) => issue.code === 'unverified_details')) return { title: 'Giờ đi hợp lý, nhưng cần xác nhận thông tin', detail: 'Một số giá và giờ mở cửa chưa được xác minh. Kiểm tra với địa điểm trước khi khởi hành.', tone: 'caution' };
+  return { title: 'Thời gian chuyến đi đang hợp lý', detail: 'Thời gian tham quan, nghỉ và di chuyển đã được ước tính. Kiểm tra thông tin địa điểm trước khi đi.', tone: 'good' };
 }
 
 export default function FeasibilityAssistant({ feasibility, activeDay, expanded, onToggle, onPreview, previewing, preview, onApply, applying, onCancelPreview }: Props) {

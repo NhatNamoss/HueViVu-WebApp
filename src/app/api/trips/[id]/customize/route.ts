@@ -5,7 +5,8 @@ import { customizeTrip } from '@/lib/ai';
 import { validateItinerary } from '@/lib/itinerary-validator';
 
 // POST /api/trips/[id]/customize
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   try {
     const userId = getAuthUserId(req);
     if (!userId) return Response.json({ error: 'Cần đăng nhập hoặc phiên khách hợp lệ' }, { status: 401 });

@@ -176,7 +176,8 @@ export default function TripDetailPage() {
     fetch('/api/weather')
       .then(r => r.json())
       .then(d => {
-        if (d.temp) setWeather({
+        if (d._fallback || !Number.isFinite(d.temp)) { setWeather(null); return; }
+        setWeather({
           emoji: d.condition_emoji || '🌤️', temp: d.temp,
           vi: d.condition_vi || '', advisory: d.advisory || '',
           advisory_type: d.advisory_type || 'good', forecast: d.forecast,
@@ -260,7 +261,7 @@ export default function TripDetailPage() {
     const prevWeatherRef = { key: '' };
     const pollWeather = () => {
       fetch('/api/weather').then(r => r.json()).then(d => {
-        if (!d.temp) return;
+        if (d._fallback || !Number.isFinite(d.temp)) { setWeather(null); return; }
         const newWeather: Weather = {
           emoji: d.condition_emoji || '🌤️', temp: d.temp,
           vi: d.condition_vi || '', advisory: d.advisory || '',
@@ -492,7 +493,9 @@ export default function TripDetailPage() {
     finally { setCustomizing(false); }
   };
 
-  const applyAdaptation = async (scenario: 'late' | 'rain' | 'hungry' | 'tired' | 'closed') => {
+  const [adaptPreview, setAdaptPreview] = useState<any>(null);
+
+  const applyAdaptation = async (scenario: 'late' | 'rain' | 'hungry' | 'tired' | 'closed', confirmed = false) => {
     if (!trip || adapting) return;
     if (scenario === 'closed' && activeActivity === null) {
       setAdaptError('Hãy mở một hoạt động đang đóng cửa trước khi chọn phương án này.'); return;
@@ -504,10 +507,16 @@ export default function TripDetailPage() {
       const response = await fetch(`/api/trips/${params.id}/adapt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ scenario, dayIndex: activeDay, activityIndex: activeActivity, delayMinutes, currentTime, lat: userLocation?.lat, lng: userLocation?.lng }),
+        body: JSON.stringify(confirmed && adaptPreview ? { ...adaptPreview.input, preview: false, expectedItinerary: adaptPreview.expectedItinerary } : { scenario, dayIndex: activeDay, activityIndex: activeActivity, delayMinutes, currentTime, lat: userLocation?.lat, lng: userLocation?.lng, preview: true }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Không thể điều chỉnh lịch trình');
+      if (data.changed === false) { setAdaptPreview(null); setAdaptError(data.message); return; }
+      if (!confirmed) {
+        setAdaptPreview({ ...data, before: trip.itinerary.days[activeDay], dayIndex: activeDay, input: { scenario, dayIndex: activeDay, activityIndex: activeActivity, delayMinutes, currentTime, lat: userLocation?.lat, lng: userLocation?.lng } });
+        return;
+      }
+      setAdaptPreview(null);
       setTrip(prev => prev ? { ...prev, itinerary: data.itinerary, ai_insight: `⚡ ${data.changes.join('. ')}` } : null);
       setTourToast(`⚡ ${data.changes.join(' · ')}`); setAdaptOpen(false); setActiveActivity(null);
       trackEvent('trip_adapted', { trip_id: String(params.id), metadata: { scenario, day: activeDay + 1, changes: data.changes } });
@@ -602,7 +611,7 @@ export default function TripDetailPage() {
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--navy)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{trip.title}</h1>
           <p style={{ fontSize: '0.75rem', color: 'var(--navy-muted)', margin: 0 }}>
-            {trip.duration} ngày · {trip.companion}
+            {trip.duration} ngày · {({ solo: 'Một mình', couple: 'Cặp đôi', family: 'Gia đình', friends: 'Nhóm bạn' } as Record<string, string>)[trip.companion] || 'Chuyến đi của bạn'}
             {weather && <span style={{ marginLeft: 8 }}>{weather.emoji} {weather.temp}°C</span>}
             {saving && <span style={{ marginLeft: 6, color: 'var(--coral)', fontStyle: 'italic' }}>Đang lưu...</span>}
           </p>
@@ -625,6 +634,7 @@ export default function TripDetailPage() {
       </div>}
 
       {/* Weather banner */}
+      <p style={{ margin: '0 20px 12px', fontSize: '.8125rem', color: 'var(--navy-muted)', lineHeight: 1.5 }}>Giờ đi và chi phí là dự kiến. Kiểm tra giờ mở cửa và giá với địa điểm trước khi khởi hành. <Link href="/profile/feedback" style={{ color: 'var(--coral)' }}>Báo thông tin chưa đúng</Link></p>
       {weather && !weatherDismissed && <WeatherBanner weather={weather} onDismiss={() => setWeatherDismissed(true)} />}
 
       {feasibility && <FeasibilityAssistant
@@ -851,11 +861,11 @@ export default function TripDetailPage() {
         </div>
       )}
       {adaptOpen && (
-        <div onClick={() => !adapting && setAdaptOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 80, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 16px 16px' }}>
-          <div onClick={event => event.stopPropagation()} style={{ width: '100%', maxWidth: 520, background: 'white', borderRadius: 'var(--radius-xl)', padding: '20px', boxShadow: '0 20px 60px rgba(0,0,0,.25)' }}>
+        <div onClick={() => { if (!adapting) { setAdaptOpen(false); setAdaptPreview(null); setAdaptError(''); } }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 80, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 16px 16px' }}>
+          <div onClick={event => event.stopPropagation()} style={{ width: '100%', maxWidth: 520, maxHeight: '85dvh', overflowY: 'auto', background: 'white', borderRadius: 'var(--radius-xl)', padding: '20px', boxShadow: '0 20px 60px rgba(0,0,0,.25)' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
-              <div><p className="section-eyebrow">ADAPTIVE TRIP</p><h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--navy)', margin: 0 }}>Chuyện gì vừa xảy ra?</h3><p style={{ fontSize: '.8rem', color: 'var(--navy-muted)', margin: '4px 0 0' }}>HueViVu sẽ sửa Ngày {activeDay + 1} và lưu ngay.</p></div>
-              <button onClick={() => setAdaptOpen(false)} disabled={adapting} style={{ border: 'none', background: 'rgba(26,29,59,.06)', width: 34, height: 34, borderRadius: '50%', fontSize: 20 }}>×</button>
+              <div><p className="section-eyebrow">ĐIỀU CHỈNH CHUYẾN ĐI</p><h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--navy)', margin: 0 }}>Chuyện gì vừa xảy ra?</h3><p style={{ fontSize: '.8rem', color: 'var(--navy-muted)', margin: '4px 0 0' }}>HueViVu chuẩn bị phương án cho ngày {activeDay + 1}. Bạn xem trước rồi chọn áp dụng hoặc giữ lịch cũ.</p></div>
+              <button onClick={() => { setAdaptOpen(false); setAdaptPreview(null); setAdaptError(''); }} disabled={adapting} style={{ border: 'none', background: 'rgba(26,29,59,.06)', width: 34, height: 34, borderRadius: '50%', fontSize: 20 }}>×</button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9 }}>
               {[
@@ -869,8 +879,19 @@ export default function TripDetailPage() {
             </div>
             <div style={{ marginTop: 10, padding: 14, background: 'rgba(255,127,107,.06)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(255,127,107,.15)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div><p style={{ fontWeight: 700, color: 'var(--navy)', margin: 0 }}>⏰ Tôi đang đến trễ</p><p style={{ fontSize: '.72rem', color: 'var(--navy-muted)', margin: '2px 0 0' }}>Lùi phần lịch còn lại, tự bỏ hoạt động vượt 22:00.</p></div><select value={delayMinutes} onChange={e => setDelayMinutes(Number(e.target.value))} style={{ padding: '7px 9px', border: '1px solid rgba(26,29,59,.12)', borderRadius: 10, background: 'white' }}><option value={30}>30 phút</option><option value={45}>45 phút</option><option value={60}>60 phút</option><option value={90}>90 phút</option></select></div>
-              <button onClick={() => applyAdaptation('late')} disabled={adapting} style={{ width: '100%', marginTop: 10, padding: 10, border: 'none', borderRadius: 'var(--radius-full)', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', color: 'white', fontWeight: 700 }}>{adapting ? 'Đang tính lại…' : `Lùi lịch ${delayMinutes} phút`}</button>
+              <button onClick={() => applyAdaptation('late')} disabled={adapting} style={{ width: '100%', marginTop: 10, padding: 10, border: 'none', borderRadius: 'var(--radius-full)', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', color: 'white', fontWeight: 700 }}>{adapting ? 'Đang tính lại…' : `Xem phương án lùi ${delayMinutes} phút`}</button>
             </div>
+            {adaptPreview && <div role="region" aria-label="Xem trước điều chỉnh" style={{ marginTop: 16, padding: 14, border: '1px solid rgba(255,127,107,.3)', borderRadius: 12 }}>
+              <h4 style={{ marginBottom: 8 }}>Phương án cho ngày {adaptPreview.dayIndex + 1}</h4>
+              <p style={{ fontSize: '.8rem', marginBottom: 8 }}>Lịch hiện tại vẫn được giữ. Xem giờ và điểm đến mới rồi chọn áp dụng.</p>
+              {adaptPreview.changes.map((change: string, i: number) => <p key={i} style={{ fontSize: '.8rem', marginBottom: 6 }}>{change}</p>)}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: '.75rem' }}>
+                <div><strong>Trước</strong>{adaptPreview.before.activities.map((a: any, i: number) => <p key={i}>{a.time} · {a.name}</p>)}</div>
+                <div><strong>Sau</strong>{adaptPreview.itinerary.days[adaptPreview.dayIndex].activities.map((a: any, i: number) => <p key={i}>{a.time} · {a.name}</p>)}</div>
+              </div>
+              <button className="btn-primary" disabled={adapting} onClick={() => applyAdaptation(adaptPreview.input.scenario, true)} style={{ width: '100%', marginTop: 12 }}>{adapting ? 'Đang áp dụng…' : 'Áp dụng phương án này'}</button>
+              <button className="btn-secondary" disabled={adapting} onClick={() => { setAdaptPreview(null); setAdaptError(''); }} style={{ width: '100%', marginTop: 8 }}>Hủy, giữ lịch hiện tại</button>
+            </div>}
             {adaptError && <p style={{ margin: '10px 0 0', padding: '9px 12px', background: 'rgba(239,68,68,.08)', color: '#B91C1C', borderRadius: 10, fontSize: '.8rem' }}>{adaptError}</p>}
           </div>
         </div>

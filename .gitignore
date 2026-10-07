@@ -35,3 +35,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 *.db
+*.db-wal
+*.db-shm
+/backups/
+.audit-release.json

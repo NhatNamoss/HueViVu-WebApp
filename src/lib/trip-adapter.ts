@@ -45,7 +45,7 @@ export function adaptTrip(itinerary: any, input: AdaptInput) {
   day.activities = Array.isArray(day.activities) ? day.activities : [];
 
   const db = getDb();
-  const places: any[] = (db.prepare(`SELECT * FROM places ORDER BY
+  const places: any[] = (db.prepare(`SELECT * FROM places WHERE publication_status = 'published' ORDER BY
     CASE verification_status WHEN 'verified' THEN 0 WHEN 'reviewed' THEN 1 ELSE 2 END,
     popularity DESC, rating DESC`).all() as any[]).map(parsePlaceRow);
   const usedIds = new Set(days.flatMap((item: any) => item.activities || []).map((activity: any) => activity.place_id).filter(Boolean));
@@ -62,6 +62,7 @@ export function adaptTrip(itinerary: any, input: AdaptInput) {
   if (input.scenario === 'late') {
     const delay = Math.min(180, Math.max(15, Number(input.delayMinutes) || 45));
     const kept: any[] = [];
+    let shiftedCount = 0;
     for (const activity of day.activities) {
       if (toMinutes(activity.time) < now - 20) { kept.push(activity); continue; }
       const shifted = toMinutes(activity.time) + delay;
@@ -69,9 +70,10 @@ export function adaptTrip(itinerary: any, input: AdaptInput) {
         changes.push(`Bỏ ${activity.name} vì vượt quá 22:00`); continue;
       }
       kept.push({ ...activity, time: toTime(shifted), ai_tip: `Đã lùi ${delay} phút do bạn đến trễ. ${activity.ai_tip || ''}`.trim() });
+      shiftedCount++;
     }
     day.activities = kept;
-    changes.unshift(`Lùi các hoạt động còn lại ${delay} phút`);
+    if (shiftedCount) changes.unshift(`Lùi ${shiftedCount} hoạt động còn lại ${delay} phút`);
   }
 
   if (input.scenario === 'rain') {

@@ -9,7 +9,8 @@ function parseTour(t: any) {
   return t;
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   const db = getDb();
   const tour = db.prepare('SELECT * FROM tours WHERE id = ?').get(params.id) as any;
   if (!tour) return Response.json({ error: 'Not found' }, { status: 404 });
@@ -30,7 +31,8 @@ export async function GET(_req: NextRequest, { params }: { params: { id: string 
   return Response.json(tour);
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   try {
     const admin = requireAdmin(req);
     if (admin instanceof Response) return admin;
@@ -59,7 +61,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   const admin = requireAdmin(req);
   if (admin instanceof Response) return admin;
   const db = getDb();

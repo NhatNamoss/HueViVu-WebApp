@@ -304,7 +304,8 @@ function seedData(db: Database.Database) {
     VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
     'user_demo001', 'HueViVu Explorer', 'demo@huevivu.app', passwordHash, 5, 12, 48
   );
-  db.prepare("UPDATE users SET role = 'admin' WHERE id = 'user_demo001'").run();
+  // Retire the publicly known demo administrator, including existing databases.
+  db.prepare("UPDATE users SET role = 'user' WHERE id = 'user_demo001'").run();
 
   // ── Seed combo tours ──
   const tourCount = (db.prepare('SELECT COUNT(*) as c FROM tours').get() as any).c;

@@ -1,0 +1,25 @@
+{
+  "source": "public/models/ngo-mon.glb",
+  "originalTriangles": 9303776,
+  "visualTriangles": 232591,
+  "colliderTriangles": 9258,
+  "visualBytes": 5316824,
+  "colliderBytes": 72352,
+  "textureMaxSize": 2048,
+  "generatedAt": "2026-10-06T16:50:39.200Z",
+  "previewBytes": 1244588,
+  "previewTriangles": 112006,
+  "bounds": {
+    "min": [
+      -8.185933704862691,
+      -0.20162691517407438,
+      -7.956245006320387
+    ],
+    "max": [
+      8.520133696390076,
+      5.344263505223807,
+      7.768860929091716
+    ]
+  },
+  "visualUniqueTriangles": 154159
+}

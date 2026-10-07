@@ -30,21 +30,23 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { duration, styles, companion, budget, food, sessionId, startLat, startLng, startDate, pacing } = body;
-    const durationDays = Math.min(7, Math.max(1, parseInt(String(duration), 10) || 0));
+    const durationDays = duration === '5+' ? 5 : Number(duration);
     const normalizedBudget = Number(budget) > 0 && Number(budget) < 10000 ? Number(budget) * 1000 : Number(budget);
 
-    if (!durationDays || !styles || !companion || !budget) {
-      return Response.json({ error: 'Thiếu thông tin để tạo lịch trình' }, { status: 400 });
+    if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 7 || !Array.isArray(styles) || styles.length < 1 || styles.length > 12 || styles.some(style => typeof style !== 'string' || !style.trim() || style.length > 100) || !['solo', 'couple', 'family', 'friends'].includes(companion) || !Number.isFinite(normalizedBudget) || normalizedBudget <= 0 || normalizedBudget > 100000000 || (food !== undefined && (!Array.isArray(food) || food.length > 20 || food.some(item => typeof item !== 'string' || item.length > 100))) || (pacing !== undefined && !['relaxed', 'balanced', 'packed'].includes(pacing))) {
+      return Response.json({ error: 'Hãy chọn từ 1 đến 7 ngày, sở thích, người đi cùng và ngân sách hợp lệ.' }, { status: 400 });
     }
+    if (startDate !== undefined && (typeof startDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !Number.isFinite(Date.parse(startDate)) || new Date(startDate).toISOString().slice(0, 10) !== startDate)) return Response.json({ error: 'Hãy chọn ngày bắt đầu hợp lệ.' }, { status: 400 });
+    if ((startLat !== undefined || startLng !== undefined) && (typeof startLat !== 'number' || typeof startLng !== 'number' || !Number.isFinite(startLat) || !Number.isFinite(startLng) || Math.abs(startLat) > 90 || Math.abs(startLng) > 180)) return Response.json({ error: 'Vị trí bắt đầu chưa hợp lệ. Hãy thử lại.' }, { status: 400 });
+    if (req.headers.has('authorization') && !getAuthUserId(req)) return Response.json({ error: 'Phiên sử dụng đã hết hạn. Hãy đăng nhập lại hoặc bắt đầu chuyến đi mới.' }, { status: 401 });
 
     let userId = getAuthUserId(req);
     const db = getDb();
 
     let guestToken: string | null = null;
     if (!userId) {
-      const safeSession = typeof sessionId === 'string' && /^[a-zA-Z0-9_-]{8,80}$/.test(sessionId)
-        ? sessionId : uuidv4().replace(/-/g, '');
-      userId = `guest_${safeSession}`;
+      // A caller-supplied analytics session must never recover another guest's identity.
+      userId = `guest_${uuidv4().replace(/-/g, '')}`;
       const guestEmail = `${userId}@guest.huevivu.local`;
       db.prepare(`INSERT OR IGNORE INTO users (id, name, email, password_hash, is_guest)
         VALUES (?, ?, ?, ?, 1)`).run(userId, 'Khách HueViVu', guestEmail, bcrypt.hashSync(uuidv4(), 4));
@@ -125,6 +127,6 @@ export async function POST(req: NextRequest) {
     return Response.json({ tripId, token: guestToken, trip: { id: tripId, ...itinerary }, feasibility });
   } catch (err: any) {
     console.error('[generate-trip]', err);
-    return Response.json({ error: 'Lỗi tạo lịch trình: ' + err.message }, { status: 500 });
+    return Response.json({ error: 'Chưa thể tạo lịch trình. Các lựa chọn của bạn vẫn được giữ; hãy thử lại.' }, { status: err instanceof SyntaxError ? 400 : 500 });
   }
 }

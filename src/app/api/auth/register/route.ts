@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 export async function POST(req: NextRequest) {
   try {
     const { name, email, password } = await req.json();
-    if (!name || !email || !password) return Response.json({ error: 'Thiếu thông tin đăng ký' }, { status: 400 });
+    if (typeof name !== 'string' || typeof email !== 'string' || typeof password !== 'string' || !name || !email || !password || name.length > 100 || email.length > 254 || password.length > 256) return Response.json({ error: 'Hãy nhập tên, email và mật khẩu hợp lệ.' }, { status: 400 });
     const normalizedEmail = String(email).trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) return Response.json({ error: 'Email không hợp lệ' }, { status: 400 });
     if (String(password).length < 6) return Response.json({ error: 'Mật khẩu cần ít nhất 6 ký tự' }, { status: 400 });

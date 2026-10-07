@@ -3,7 +3,8 @@ import { getDb } from '@/lib/db';
 import { getAuthUserId } from '@/lib/auth';
 import { optimizeItinerary } from '@/lib/itinerary-validator';
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   const userId = getAuthUserId(req);
   if (!userId) return Response.json({ error: 'Cần đăng nhập hoặc phiên khách hợp lệ' }, { status: 401 });
   const db = getDb();

@@ -13,8 +13,8 @@ const TOPICS = [
 
 const FAQS = [
   { q: 'Làm sao thay đổi lịch trình AI đã tạo?', a: 'Vào trang chuyến đi → nhấn ✏️ bên cạnh hoạt động để sửa, hoặc dùng chatbot AI để yêu cầu thay đổi bằng ngôn ngữ tự nhiên.' },
-  { q: 'Ứng dụng có hoạt động offline không?', a: 'Các lịch trình đã tải sẽ hiển thị offline. Tính năng AI, tìm kiếm và thời tiết cần kết nối internet.' },
-  { q: 'Làm sao thêm địa điểm vào chuyến đi?', a: 'Trong trang chuyến đi, nhấn nút "🔍 Tìm địa điểm" ở mỗi ngày để tìm kiếm và thêm địa điểm với giờ tự chọn.' },
+  { q: 'Ứng dụng có hoạt động offline không?', a: 'Bản dùng thử cần kết nối internet để mở lại lịch trình, tìm địa điểm và cập nhật thông tin. Hãy sao chép lịch trước khi đi vào nơi sóng yếu.' },
+  { q: 'Làm sao thêm địa điểm vào chuyến đi?', a: 'Trong trang chuyến đi, chọn ngày rồi nhấn “Chèn điểm phù hợp”. Xem phương án và xác nhận trước khi thêm.' },
   { q: 'Dữ liệu cá nhân có được bảo mật không?', a: 'Có. Xem trang Quyền riêng tư để biết chi tiết về cách chúng tôi xử lý dữ liệu.' },
   { q: 'Làm sao xóa tài khoản?', a: 'Gửi yêu cầu xóa tài khoản qua form này với chủ đề "Quyền riêng tư" và chúng tôi xử lý trong 3-5 ngày làm việc.' },
 ];
@@ -42,6 +42,7 @@ export default function FeedbackPage() {
   const [rating, setRating] = useState(0);
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   useEffect(() => {
@@ -51,17 +52,21 @@ export default function FeedbackPage() {
   }, []);
 
   const handleSubmit = async () => {
-    if (!topic || !message.trim()) return;
-    setSending(true);
+    if (!topic || !message.trim() || sending) return;
+    setSending(true); setSendError('');
     try {
-      await fetch('/api/feedback', {
+      const token = localStorage.getItem('hv_token');
+      const response = await fetch('/api/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(15000),
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ topic, message, email, rating, placeId }),
       });
-    } catch {}
-    setSending(false);
-    setSent(true);
+      const data = await response.json();
+      if (!response.ok || data.ok !== true) { setSendError(data.error || 'Chưa lưu được phản hồi. Nội dung vẫn được giữ để bạn thử gửi lại.'); return; }
+      setSent(true);
+    } catch { setSendError('Chưa gửi được phản hồi. Nội dung vẫn được giữ; kiểm tra mạng rồi bấm gửi lại.'); }
+    finally { setSending(false); }
   };
 
   if (sent) {
@@ -72,7 +77,7 @@ export default function FeedbackPage() {
           <div className="animate-float" style={{ fontSize: '3.5rem', marginBottom: 16 }}>✅</div>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--navy)', marginBottom: 8 }}>Đã nhận phản hồi!</h2>
           <p style={{ fontSize: '0.9rem', color: 'var(--navy-muted)', lineHeight: 1.6, marginBottom: 28 }}>
-            Cảm ơn bạn đã góp ý. Chúng tôi sẽ xem xét và phản hồi qua email trong 1-3 ngày làm việc.
+            HueViVu đã lưu góp ý của bạn để nhóm phụ trách xem xét. Nếu bạn để lại email, nhóm có thể liên hệ khi cần làm rõ.
           </p>
           <Link href="/profile" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '12px 24px', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', color: 'white', borderRadius: 'var(--radius-full)', fontWeight: 700, textDecoration: 'none' }}>
             Quay lại hồ sơ
@@ -148,6 +153,7 @@ export default function FeedbackPage() {
           <p style={{ fontSize: '0.75rem', color: 'var(--navy-muted)', marginTop: 4 }}>Để chúng tôi có thể phản hồi trực tiếp</p>
         </div>
 
+        {sendError && <p role="alert" style={{ color: '#b91c1c', fontSize: '.875rem', marginBottom: 12 }}>{sendError}</p>}
         <button onClick={handleSubmit} disabled={!topic || !message.trim() || sending} style={{ width: '100%', padding: '14px', fontFamily: 'var(--font)', fontWeight: 700, fontSize: '0.9375rem', border: 'none', borderRadius: 'var(--radius-full)', cursor: (!topic || !message.trim()) ? 'not-allowed' : 'pointer', background: (!topic || !message.trim()) ? 'rgba(26,29,59,0.1)' : 'linear-gradient(135deg,var(--coral),var(--warm-orange))', color: (!topic || !message.trim()) ? 'var(--navy-muted)' : 'white', transition: 'all 0.2s' }}>
           {sending ? '⏳ Đang gửi...' : '📨 Gửi phản hồi'}
         </button>

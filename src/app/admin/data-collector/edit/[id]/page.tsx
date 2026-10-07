@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import PlaceForm from '@/components/admin/PlaceForm';
 import TaskTracker from '@/components/admin/TaskTracker';
 import { authenticatedHeaders } from '@/lib/client-auth';
 
-export default function EditPlacePage({ params }: { params: { id: string } }) {
+export default function EditPlacePage() {
+  const params = useParams<{ id: string }>();
   const [initialData, setInitialData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 

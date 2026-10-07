@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { Suspense } from 'react';
+import StartupLoading from '@/components/layout/StartupLoading';
+import NavigationLoading from '@/components/layout/NavigationLoading';
+import '@/components/layout/app-loading.css';
 
 export const metadata: Metadata = {
   title: 'HueViVu — AI Travel Companion',
@@ -21,6 +25,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
       </head>
       <body suppressHydrationWarning>
+        <StartupLoading />
+        <Suspense fallback={null}><NavigationLoading /></Suspense>
         {children}
       </body>
     </html>

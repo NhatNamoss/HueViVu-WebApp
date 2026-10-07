@@ -92,6 +92,10 @@ export default function FlowPage() {
   const [freeInput, setFreeInput] = useState('');
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const transitionRef = useRef(false);
+  const generationRef = useRef(false);
+  const [advancing, setAdvancing] = useState(false);
+  const [generationError, setGenerationError] = useState('');
 
   useEffect(() => {
     getSessionId();
@@ -114,6 +118,9 @@ export default function FlowPage() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chat]);
 
   const handlePick = (key: keyof FlowState, value: string) => {
+    if (transitionRef.current) return;
+    transitionRef.current = true;
+    setAdvancing(true);
     setState(prev => ({ ...prev, [key]: value }));
     trackEvent('preference_select', { metadata: { key, value, step } });
     const whisper = COMPANION_BUDGET_WHISPERS[value] || DURATION_WHISPERS[value] || '';
@@ -127,6 +134,8 @@ export default function FlowPage() {
       setTimeout(() => {
         setChat(prev => [...prev, { from: 'ai', text: STEP_QUESTIONS[step + 1].q }]);
         setStep(s => s + 1);
+        transitionRef.current = false;
+        setAdvancing(false);
       }, whisper ? 700 : 300);
     }
   };
@@ -139,6 +148,9 @@ export default function FlowPage() {
   };
 
   const handleGenerate = async () => {
+    if (generationRef.current) return;
+    generationRef.current = true;
+    setGenerationError('');
     setGenerating(true);
     setChat(prev => [
       ...prev,
@@ -149,6 +161,7 @@ export default function FlowPage() {
       const token = localStorage.getItem('hv_token');
       const res = await fetch('/api/trips', {
         method: 'POST',
+        signal: AbortSignal.timeout(30000),
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           duration: state.duration,
@@ -166,19 +179,22 @@ export default function FlowPage() {
         }),
       });
       const data = await res.json();
-      if (data.tripId) {
+      if (res.ok && data.tripId) {
         if (data.token) localStorage.setItem('hv_token', data.token);
         trackEvent('trip_generated', { trip_id: data.tripId, metadata: { duration: state.duration, companion: state.companion, tags: state.tags } });
         setTripId(data.tripId);
         setDone(true);
         setChat(prev => [...prev, { from: 'ai', text: `Xong rồi! Lịch trình ${state.duration} ngày đã sẵn sàng 🎉` }]);
       } else {
-        setChat(prev => [...prev, { from: 'ai', text: 'Có lỗi xảy ra. Thử lại nhé!' }]);
+        if (res.status === 401) localStorage.removeItem('hv_token');
+        setGenerationError(res.status === 401 ? 'Phiên sử dụng đã hết hạn. Bấm tạo lại để bắt đầu chuyến đi mới; lịch trình cũ vẫn thuộc phiên trước.' : (data.error || 'Chưa thể tạo lịch trình. Lựa chọn của bạn vẫn được giữ. Bấm tạo lại để thử.'));
         setGenerating(false);
       }
     } catch {
-      setChat(prev => [...prev, { from: 'ai', text: 'Mất kết nối. Thử lại sau nhé!' }]);
+      setGenerationError('Chưa kết nối được với HueViVu. Kiểm tra mạng rồi bấm tạo lại; các lựa chọn của bạn vẫn được giữ.');
       setGenerating(false);
+    } finally {
+      generationRef.current = false;
     }
   };
 
@@ -194,7 +210,7 @@ export default function FlowPage() {
         </button>
         <div style={{ flex: 1 }}>
           <p className="section-eyebrow" style={{ marginBottom: 1 }}>LÊN KẾ HOẠCH</p>
-          <h1 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--navy)' }}>Hành trình với AI</h1>
+          <h1 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--navy)' }}>Tạo lịch trình Huế</h1>
         </div>
         <div style={{ display: 'flex', gap: 5 }}>
           {STEP_QUESTIONS.map((_, i) => (
@@ -225,7 +241,7 @@ export default function FlowPage() {
           {!isTagStep && STEP_OPTIONS[currentStepKey] && (
             <div style={{ display: 'grid', gridTemplateColumns: STEP_OPTIONS[currentStepKey].length <= 3 ? `repeat(${STEP_OPTIONS[currentStepKey].length}, 1fr)` : 'repeat(2, 1fr)', gap: 10 }}>
               {STEP_OPTIONS[currentStepKey].map(opt => (
-                <button key={opt.value} onClick={() => handlePick(currentStepKey, opt.value)} style={{ padding: '14px 10px', background: state[currentStepKey] === opt.value ? 'linear-gradient(135deg, var(--coral), var(--warm-orange))' : 'var(--card-bg)', border: `1.5px solid ${state[currentStepKey] === opt.value ? 'transparent' : 'rgba(26,29,59,0.08)'}`, borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, transition: 'all 0.2s var(--ease-spring)', boxShadow: state[currentStepKey] === opt.value ? 'var(--shadow-glow)' : 'none', fontFamily: 'var(--font)' }}>
+                <button key={opt.value} disabled={advancing} onClick={() => handlePick(currentStepKey, opt.value)} style={{ padding: '14px 10px', background: state[currentStepKey] === opt.value ? 'linear-gradient(135deg, var(--coral), var(--warm-orange))' : 'var(--card-bg)', border: `1.5px solid ${state[currentStepKey] === opt.value ? 'transparent' : 'rgba(26,29,59,0.08)'}`, borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, transition: 'all 0.2s var(--ease-spring)', boxShadow: state[currentStepKey] === opt.value ? 'var(--shadow-glow)' : 'none', fontFamily: 'var(--font)' }}>
                   <span style={{ fontSize: '1.5rem' }}>{opt.emoji}</span>
                   <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: state[currentStepKey] === opt.value ? 'white' : 'var(--navy)' }}>{opt.label}</span>
                 </button>
@@ -243,6 +259,8 @@ export default function FlowPage() {
               </div>
               <textarea value={freeInput} onChange={e => setFreeInput(e.target.value)} placeholder="Ghi chú thêm (tuỳ chọn)..." style={{ width: '100%', padding: '12px', background: 'var(--card-bg)', border: '1.5px solid rgba(26,29,59,0.08)', borderRadius: 'var(--radius-md)', fontFamily: 'var(--font)', fontSize: '0.9rem', outline: 'none', color: 'var(--navy)', resize: 'none', minHeight: 60, lineHeight: 1.5 }} />
               <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--card-bg)', border: '1.5px solid rgba(26,29,59,0.08)', borderRadius: 'var(--radius-md)' }}><span style={{ fontSize: '1.1rem' }}>📅</span><span style={{ flex: 1, fontSize: '.8rem', fontWeight: 600, color: 'var(--navy)' }}>Ngày bắt đầu <small style={{ display: 'block', color: 'var(--navy-muted)', fontWeight: 400 }}>Giúp kiểm tra giờ mở cửa chính xác</small></span><input type="date" value={state.startDate} min={new Date().toISOString().slice(0, 10)} onChange={e => setState(prev => ({ ...prev, startDate: e.target.value }))} style={{ border: '1px solid rgba(26,29,59,.12)', borderRadius: 8, padding: '7px', color: 'var(--navy)' }} /></label>
+              <p style={{ fontSize: '.8125rem', color: 'var(--navy-muted)' }}>Chọn ít nhất một sở thích. HueViVu sẽ sắp xếp giờ tham quan, di chuyển và nghỉ; bạn xem lịch rồi điều chỉnh trước khi đi.</p>
+              {generationError && <p role="alert" style={{ color: '#b91c1c', fontSize: '.875rem' }}>{generationError}</p>}
               <button onClick={handleGenerate} disabled={state.tags.length === 0} className="btn-primary btn-ripple" style={{ width: '100%', opacity: state.tags.length === 0 ? 0.5 : 1 }}>
                 ✨ Tạo hành trình của tôi
               </button>
@@ -257,7 +275,7 @@ export default function FlowPage() {
       {generating && !done && (
         <div style={{ padding: '24px 20px 48px', textAlign: 'center' }}>
           <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'linear-gradient(135deg, var(--coral), var(--warm-orange))', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '1.5rem', animation: 'pulse 2s ease-in-out infinite' }}>✨</div>
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--navy)', marginBottom: 6 }}>AI đang tạo hành trình...</h2>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--navy)', marginBottom: 6 }}>Đang sắp xếp lịch trình...</h2>
           <p style={{ fontSize: '0.875rem', color: 'var(--navy-muted)' }}>Lắng nghe từng sở thích, cân bằng từng khoảnh khắc</p>
         </div>
       )}

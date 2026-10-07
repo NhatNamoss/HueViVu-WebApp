@@ -33,7 +33,7 @@ export default function HueViVuLivePage() {
   const [nearby, setNearby] = useState<any[]>([]);
 
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
-  useEffect(() => { fetch('/api/weather').then(r => r.json()).then(setWeather).catch(() => {}); }, []);
+  useEffect(() => { fetch('/api/weather').then(r => r.json()).then(data => setWeather(data._fallback ? null : data)).catch(() => {}); }, []);
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach(track => track.stop());
     window.speechSynthesis?.cancel();
@@ -59,6 +59,10 @@ export default function HueViVuLivePage() {
   const startGuide = async () => {
     setStarting(true); setError('');
     try {
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        setError('Camera cần kết nối HTTPS hoặc localhost. Hãy mở HueViVu qua đường dẫn HTTPS; bạn vẫn có thể khám phá địa điểm và tạo lịch trình.');
+        return;
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
       streamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
@@ -126,10 +130,10 @@ export default function HueViVuLivePage() {
           <div className="max-w-md text-center bg-black/45 backdrop-blur-xl border border-white/15 rounded-3xl p-7">
             <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-amber-300 to-orange-500 flex items-center justify-center text-black"><Camera size={30} /></div>
             <h2 className="text-2xl font-bold mt-5">Khám phá Huế ngay trước mắt</h2>
-            <p className="text-white/70 text-sm leading-6 mt-3">Hướng camera vào công trình, hiện vật hoặc bảng tên. Live Guide đối chiếu với kho dữ liệu đã kiểm chứng để kể chuyện và đưa mẹo thực tế.</p>
+            <p className="text-white/70 text-sm leading-6 mt-3">Hướng camera vào công trình, hiện vật hoặc bảng tên rồi chọn câu hỏi. HueViVu dùng ảnh và dữ liệu địa điểm để gợi ý; thông tin chưa xác minh sẽ được nêu rõ.</p>
             <div className="grid grid-cols-2 gap-2 mt-5 text-left text-xs text-white/75"><span className="bg-white/10 rounded-xl p-3">👁 Nhận diện có kiểm chứng</span><span className="bg-white/10 rounded-xl p-3">📖 Kể chuyện theo ngữ cảnh</span><span className="bg-white/10 rounded-xl p-3">🎒 Giờ, giá và mẹo</span><span className="bg-white/10 rounded-xl p-3">🧭 Gợi ý điểm tiếp theo</span></div>
             <button onClick={startGuide} disabled={starting} className="w-full mt-6 py-3.5 bg-white text-gray-950 font-bold rounded-full disabled:opacity-60">{starting ? 'Đang mở camera…' : 'Bắt đầu Live Guide'}</button>
-            <p className="text-[11px] text-white/45 mt-3">Camera và vị trí chỉ được xin quyền sau khi bạn bấm bắt đầu.</p>
+            <p className="text-[11px] text-white/45 mt-3">Bấm bắt đầu để cấp quyền camera và vị trí. Khi bạn hỏi, ảnh chụp và vị trí nếu được cấp quyền sẽ gửi tới dịch vụ xử lý để trả lời.</p>
             {error && <p className="text-sm text-red-200 bg-red-500/20 rounded-xl p-3 mt-4">{error}</p>}
           </div>
         </section>

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import PlaceCard from '@/components/ui/PlaceCard';
 import CategoryFilter from '@/components/ui/CategoryFilter';
+import LoadingState from '@/components/ui/LoadingState';
 
 type Place = {
   id: string; name: string; category: string;
@@ -93,6 +94,9 @@ const categories = [
 
 export default function HomePage() {
   const [places, setPlaces] = useState<Place[]>([]);
+  const [placesLoading, setPlacesLoading] = useState(true);
+  const [placesError, setPlacesError] = useState('');
+  const [retry, setRetry] = useState(0);
   const [weather, setWeather] = useState<Weather | null>(null);
   const [activeTrip, setActiveTrip] = useState<any>(null);
   const [activeCategory, setActiveCategory] = useState('all');
@@ -103,8 +107,8 @@ export default function HomePage() {
   useEffect(() => {
     setMounted(true);
     setHour(new Date().getHours());
-    fetch('/api/weather').then(r => r.json()).then(setWeather).catch(() => {});
-    fetch('/api/places').then(r => r.json()).then(setPlaces).catch(() => {});
+    fetch('/api/weather').then(r => r.json()).then(data => setWeather(data._fallback ? null : data)).catch(() => {});
+
     const token = localStorage.getItem('hv_token');
     if (token) {
       fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
@@ -116,6 +120,17 @@ export default function HomePage() {
         }).catch(() => {});
     }
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setPlacesLoading(true); setPlacesError('');
+    fetch('/api/places', { signal: controller.signal })
+      .then(async r => { if (!r.ok) throw new Error(); const data = await r.json(); if (!Array.isArray(data)) throw new Error(); return data; })
+      .then(setPlaces)
+      .catch(() => { if (!controller.signal.aborted) setPlacesError('Chưa tải được địa điểm. Kiểm tra mạng rồi thử lại.'); })
+      .finally(() => { if (!controller.signal.aborted) setPlacesLoading(false); });
+    return () => controller.abort();
+  }, [retry]);
 
   const filtered = activeCategory === 'all' ? places : places.filter(p => p.category === activeCategory);
   const hero = getContextualHero(hour, weather);
@@ -247,7 +262,7 @@ export default function HomePage() {
                   {activeTrip.title}
                 </h3>
                 <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.55)' }}>
-                  📅 {activeTrip.duration} ngày · {activeTrip.companion}
+                  📅 {activeTrip.duration} ngày · {({ solo: 'Một mình', couple: 'Cặp đôi', family: 'Gia đình', friends: 'Nhóm bạn' } as Record<string, string>)[activeTrip.companion] || 'Chuyến đi của bạn'}
                 </p>
               </div>
               <div style={{ textAlign: 'right' }}>
@@ -371,6 +386,14 @@ export default function HomePage() {
       </section>
 
       {/* ── Category Filter ───────────────────────────────── */}
+      <section style={{ padding: '0 20px', marginBottom: 22 }}>
+        <Link href="/3d-demo" prefetch={false} style={{ display: 'block', padding: '18px', borderRadius: 'var(--radius-lg)', background: 'linear-gradient(135deg,#f7ead7,#fcefe5)', border: '1px solid rgba(164,104,50,.15)', color: 'var(--navy)' }}>
+          <p className="section-eyebrow">THAM QUAN TRƯỚC KHI ĐI</p>
+          <h2 style={{ fontSize: '1.05rem', margin: '5px 0 7px', fontWeight: 750 }}>🎮 Dạo Ngọ Môn trong trò chơi 3D</h2>
+          <p style={{ fontSize: '.8125rem', lineHeight: 1.55, color: 'var(--navy-muted)' }}>Đi bộ quanh mô hình, tìm 3 vòng sáng và nghe thuyết minh tiếng Việt. Thử khám phá công trình trước chuyến đi Huế.</p>
+          <p style={{ marginTop: 12, color: '#a46832', fontSize: '.8125rem', fontWeight: 750 }}>Bắt đầu tham quan →</p>
+        </Link>
+      </section>
       <section style={{ marginBottom: 8 }}>
         <div style={{ padding: '0 20px', marginBottom: 10 }}>
           <h2 className="section-title">🔍 Khám phá theo tâm trạng</h2>
@@ -384,11 +407,14 @@ export default function HomePage() {
           <h2 className="section-title">🔥 Địa điểm nổi bật</h2>
           <Link href="/explore" className="see-all">Xem tất cả</Link>
         </div>
+        {placesLoading && <div style={{ padding: '0 20px' }}><LoadingState compact title="Đang tải địa điểm…" detail="Bạn vẫn có thể tạo lịch trình hoặc thử tham quan 3D trong lúc chờ." /></div>}
         <div className="featured-scroll" style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
+          {placesError && <div role="alert"><p>{placesError}</p><button className="btn-secondary" onClick={() => setRetry(value => value + 1)}>Thử tải lại</button></div>}
+          {!placesLoading && !placesError && filtered.length === 0 && <p>Chưa có địa điểm trong nhóm này. Hãy chọn nhóm khác hoặc tạo lịch trình để khám phá Huế.</p>}
           {filtered.slice(0, 6).map(place => (
             <PlaceCard key={place.id} place={place} layout="horizontal" />
           ))}
-          {places.length === 0 && Array.from({ length: 4 }).map((_, i) => (
+          {placesLoading && Array.from({ length: 4 }).map((_, i) => (
             <div key={i} style={{ flexShrink: 0, width: 160, height: 200, borderRadius: 'var(--radius-lg)' }} className="skeleton" />
           ))}
         </div>

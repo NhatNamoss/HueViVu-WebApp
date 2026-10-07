@@ -8,6 +8,7 @@ import * as THREE from 'three'
 import React from 'react'
 import { useGLTF } from '@react-three/drei'
 import { GLTF } from 'three-stdlib'
+import { ThreeElements } from '@react-three/fiber'
 
 type GLTFResult = GLTF & {
   nodes: {
@@ -21,8 +22,8 @@ type GLTFResult = GLTF & {
   animations: GLTF['animations']
 }
 
-export function Model(props: JSX.IntrinsicElements['group']) {
-  const { nodes, materials } = useGLTF('/ngo-mon-transformed.glb') as GLTFResult
+export function Model(props: ThreeElements['group']) {
+  const { nodes, materials } = useGLTF('/ngo-mon-transformed.glb') as unknown as GLTFResult
   return (
     <group {...props} dispose={null}>
       <mesh name="mesh_node" geometry={nodes.mesh_node.geometry} material={materials.material} position={[0, 2.624, 0]} scale={8.609} />

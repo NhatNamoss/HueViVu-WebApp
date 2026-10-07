@@ -4,7 +4,8 @@ import { getAuthUserId } from '@/lib/auth';
 import { presentTripBudget, presentTripTitle } from '@/lib/trip-presentation';
 
 // GET /api/trips/[id]
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   const db = getDb();
   const userId = getAuthUserId(req);
   const trip = db.prepare('SELECT * FROM trips WHERE id = ?').get(params.id) as any;
@@ -30,7 +31,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 // PUT /api/trips/[id]
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   const userId = getAuthUserId(req);
   if (!userId) return Response.json({ error: 'Cần đăng nhập' }, { status: 401 });
 
@@ -56,7 +58,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 // DELETE /api/trips/[id]  
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   const userId = getAuthUserId(req);
   if (!userId) return Response.json({ error: 'Cần đăng nhập' }, { status: 401 });
 

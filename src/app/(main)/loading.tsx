@@ -1,6 +1,9 @@
+import LoadingState from '@/components/ui/LoadingState';
+
 export default function MainLoading() {
   return (
     <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <LoadingState compact title="Đang mở trang khám phá Huế…" detail="HueViVu đang chuẩn bị nội dung cho bạn." />
       <div className="skeleton" style={{ height: 180, borderRadius: 'var(--radius-xl)' }} />
       <div className="skeleton" style={{ height: 24, width: '60%', borderRadius: 8 }} />
       <div className="skeleton" style={{ height: 16, width: '40%', borderRadius: 6 }} />

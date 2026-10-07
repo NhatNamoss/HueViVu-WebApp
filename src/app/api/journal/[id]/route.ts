@@ -2,7 +2,8 @@ import { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getAuthUserId } from '@/lib/auth';
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   const userId = getAuthUserId(req);
   if (!userId) return Response.json({ error: 'Cần đăng nhập' }, { status: 401 });
 
@@ -19,7 +20,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   return Response.json(db.prepare('SELECT * FROM journal_entries WHERE id = ?').get(params.id));
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   const userId = getAuthUserId(req);
   if (!userId) return Response.json({ error: 'Cần đăng nhập' }, { status: 401 });
 

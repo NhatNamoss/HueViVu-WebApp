@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 function mapCondition(desc: string): { vi: string; emoji: string; key: string } {
   const d = desc.toLowerCase();
   if (d.includes('thunder') || d.includes('storm')) return { vi: 'Giông bão', emoji: '⛈️', key: 'rainy' };
@@ -71,26 +73,12 @@ export async function GET() {
       updated_at: new Date().toISOString(),
     });
   } catch {
-    // Hard fallback — never crash
-    const month = new Date().getMonth();
-    const isRainy = month >= 9 || month <= 1;
-    const temp = isRainy ? 23 : 31;
     return Response.json({
-      city: 'Huế', temp, feels_like: temp - 2,
-      humidity: isRainy ? 88 : 68,
-      condition: isRainy ? 'rainy' : 'sunny',
-      condition_vi: isRainy ? 'Có mưa' : 'Nắng đẹp',
-      condition_emoji: isRainy ? '🌧️' : '☀️',
-      uv_index: isRainy ? 3 : 8, wind_kmh: isRainy ? 18 : 10,
-      advisory: isRainy ? '🌧️ Mùa mưa Huế — mang ô và áo khoác.' : '✅ Thời tiết đẹp hôm nay!',
-      advisory_type: isRainy ? 'caution' : 'good',
-      forecast: Array.from({ length: 5 }, (_, i) => ({
-        day: ['Hôm nay','Ngày mai','Thứ 4','Thứ 5','Thứ 6'][i],
-        temp_max: temp + 2, temp_min: temp - 4,
-        condition: isRainy ? 'rainy' : 'sunny',
-        emoji: isRainy ? '🌧️' : '☀️', condition_vi: isRainy ? 'Có mưa' : 'Nắng',
-      })),
-      updated_at: new Date().toISOString(), _fallback: true,
+      city: 'Huế', temp: null, feels_like: null, humidity: null,
+      condition: 'unknown', condition_vi: 'Chưa cập nhật thời tiết', condition_emoji: '🌥️',
+      uv_index: null, wind_kmh: null, forecast: [],
+      advisory: 'Chưa lấy được thời tiết hiện tại. Kiểm tra dự báo địa phương trước khi đi và mang theo ô.',
+      advisory_type: 'caution', updated_at: null, _fallback: true,
     });
   }
 }

@@ -1,16 +1,24 @@
 import jwt from 'jsonwebtoken';
 import { NextRequest } from 'next/server';
 import { getDb } from './db';
+import { randomBytes } from 'crypto';
 
-const SECRET = process.env.JWT_SECRET || 'huevivu_dev_secret_do_not_use_in_prod';
+const authGlobal = globalThis as typeof globalThis & { huevivuDevSecret?: string };
+function getSecret(): string {
+  const configured = process.env.JWT_SECRET;
+  if (configured && configured.length >= 32 && configured !== 'huevivu_dev_secret_do_not_use_in_prod') return configured;
+  if (process.env.NODE_ENV === 'production') throw new Error('JWT_SECRET must contain at least 32 characters');
+  return authGlobal.huevivuDevSecret ??= randomBytes(48).toString('hex');
+}
 
 export function generateToken(userId: string): string {
-  return jwt.sign({ userId }, SECRET, { expiresIn: '30d' });
+  return jwt.sign({ userId }, getSecret(), { expiresIn: '30d', algorithm: 'HS256' });
 }
 
 export function verifyToken(token: string): { userId: string } | null {
   try {
-    return jwt.verify(token, SECRET) as { userId: string };
+    const payload = jwt.verify(token, getSecret(), { algorithms: ['HS256'] });
+    return typeof payload === 'object' && typeof payload.userId === 'string' ? { userId: payload.userId } : null;
   } catch {
     return null;
   }
@@ -20,7 +28,8 @@ export function getAuthUserId(req: NextRequest): string | null {
   const auth = req.headers.get('authorization');
   if (!auth || !auth.startsWith('Bearer ')) return null;
   const payload = verifyToken(auth.slice(7));
-  return payload?.userId || null;
+  if (!payload?.userId || payload.userId === 'user_demo001') return null;
+  return getDb().prepare('SELECT id FROM users WHERE id = ?').get(payload.userId) ? payload.userId : null;
 }
 
 export function requireAuth(req: NextRequest): { userId: string } | Response {

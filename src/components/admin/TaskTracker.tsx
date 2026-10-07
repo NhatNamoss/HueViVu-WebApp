@@ -29,7 +29,8 @@ export default function TaskTracker({ placeId }: { placeId?: string }) {
   useEffect(() => { load(); }, [load]);
 
   const toggleItem = (tid: string, i: number) => setChecked(p => {
-    const s = new Set(p[tid] || []); s.has(i) ? s.delete(i) : s.add(i);
+    const s = new Set(p[tid] || []);
+    if (s.has(i)) s.delete(i); else s.add(i);
     return { ...p, [tid]: s };
   });
 

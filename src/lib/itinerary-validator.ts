@@ -17,7 +17,7 @@ const travelMinutes = estimateTravelMinutes;
 
 export function validateItinerary(itinerary: any, startDate?: string) {
   const db = getDb();
-  const places = db.prepare('SELECT id, name, opening_hours, hours_time FROM places').all() as any[];
+  const places = db.prepare('SELECT id, name, opening_hours, hours_time, verification_status FROM places').all() as any[];
   const byId = new Map(places.map(place => [place.id, place]));
   const byName = new Map(places.map(place => [place.name, place]));
   const baseDate = startDate ? new Date(`${startDate}T12:00:00+07:00`) : new Date();
@@ -26,11 +26,13 @@ export function validateItinerary(itinerary: any, startDate?: string) {
     const activities = [...(day.activities || [])].sort((a, b) => minutes(a.time) - minutes(b.time));
     const date = new Date(baseDate); date.setDate(baseDate.getDate() + dayIndex);
     const dayKey = bangkokNow(date).day;
+    const unverifiedNames: string[] = [];
     let walkingKm = 0; let totalKm = 0;
     for (let index = 0; index < activities.length; index++) {
       const activity = activities[index];
       const place = byId.get(activity.place_id) || byName.get(activity.name);
       if (place) {
+        if (place.verification_status !== 'verified') unverifiedNames.push(activity.name);
         const schedule = parseOpeningHours(place.opening_hours, place.hours_time);
         if (!isOpenAt(schedule, dayKey, activity.time) && Object.values(schedule).some((items: any) => items.length)) {
           issues.push({ severity: 'error', code: 'closed', title: 'Địa điểm có thể đang đóng cửa', activity: activity.name, activityIndex: index, fixable: true, message: `${activity.name} không mở vào lúc ${activity.time} như lịch đang xếp.`, recommendation: 'HueViVu có thể đổi giờ ghé hoặc tìm một địa điểm tương tự đang mở.' });
@@ -54,6 +56,7 @@ export function validateItinerary(itinerary: any, startDate?: string) {
       if (km > 12) issues.push({ severity: 'warning', code: 'long_transfer', title: 'Chặng di chuyển khá xa', activity: next.name, activityIndex: index + 1, message: `Bạn cần đi khoảng ${km.toFixed(1)} km để đến ${next.name}.`, recommendation: 'Nên gom các địa điểm cùng khu vực hoặc dành thêm thời gian di chuyển.' });
     }
     const types = new Set(activities.map((activity: any) => activity.type));
+    if (unverifiedNames.length) issues.push({ severity: 'warning', code: 'unverified_details', title: 'Cần xác nhận giá và giờ mở cửa', message: `${unverifiedNames.length} điểm trong ngày chưa được xác minh: ${unverifiedNames.slice(0, 3).join(', ')}${unverifiedNames.length > 3 ? '…' : ''}. Giờ đã xếp có thể không khớp thực tế.`, recommendation: 'Mở thông tin địa điểm và xác nhận giờ mở cửa, giá trước khi khởi hành để tránh đến lúc đóng cửa.' });
     if (!types.has('food') && !types.has('market')) issues.push({ severity: 'warning', code: 'missing_meal', title: 'Chưa có khoảng nghỉ ăn uống', message: 'Ngày này chưa dành thời gian rõ ràng cho bữa ăn.', recommendation: 'Nên thêm một điểm ăn hoặc khoảng nghỉ để chuyến đi không bị mệt.' });
     if (activities.length > 8) issues.push({ severity: 'error', code: 'overloaded_day', title: 'Một ngày có quá nhiều hoạt động', fixable: true, message: `${activities.length} hoạt động trong một ngày sẽ khiến bạn liên tục di chuyển và khó tận hưởng từng điểm.`, recommendation: 'Nên giữ tối đa 6–8 hoạt động, tùy nhịp độ mong muốn.' });
     else if (activities.length > 7) issues.push({ severity: 'warning', code: 'busy_day', title: 'Ngày này khá dày', fixable: true, message: 'Bạn sẽ phải duy trì nhịp đi nhanh trong phần lớn thời gian.', recommendation: 'Có thể bỏ bớt một điểm nếu muốn chuyến đi thư thả.' });

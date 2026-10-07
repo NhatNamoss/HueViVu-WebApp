@@ -3,7 +3,8 @@ import { getDb } from '@/lib/db';
 import { getAuthUserId } from '@/lib/auth';
 
 // POST /api/feed/[id]/like  
-export async function POST(req: NextRequest, { params }: { params: { id: string; action: string } }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   const db = getDb();
   const userId = getAuthUserId(req);
   if (!userId) return Response.json({ error: 'Cần đăng nhập để thích hành trình' }, { status: 401 });

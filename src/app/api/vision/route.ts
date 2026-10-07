@@ -30,7 +30,7 @@ function fallbackReply(mode: string, places: any[], prompt: string) {
   if (mode === 'practical') return `${place.name}: ${place.hours || 'giờ mở cửa chưa được xác minh'}; ${place.price || 'giá chưa cập nhật'}. ${place.tips?.[0] || place.ai_insight || 'Hãy kiểm tra thông tin tại quầy trước khi vào.'}`;
   if (mode === 'next') return `Điểm phù hợp gần bạn là ${place.name}${place.distance_km != null ? `, cách khoảng ${place.distance_km.toFixed(1)} km` : ''}. ${place.ai_insight || place.description || ''}`;
   if (mode === 'story') return `${place.name}. ${place.description || place.ai_insight || 'Dữ liệu kể chuyện đang được người kiểm chứng bổ sung.'}`;
-  return `Khung hình có thể liên quan đến ${place.name}. ${place.ai_insight || place.description || `Câu hỏi của bạn: ${prompt}`}`;
+  return `Địa điểm tham khảo trong danh mục: ${place.name}. ${place.ai_insight || place.description || `Câu hỏi của bạn: ${prompt}`}`;
 }
 
 export async function POST(req: NextRequest) {
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     const suggestions = ['Đây là công trình gì?', 'Kể tôi một câu chuyện ngắn', 'Có mẹo tham quan nào?', 'Tiếp theo nên đi đâu?'];
 
     if (!process.env.GEMINI_API_KEY) {
-      return Response.json({ reply: fallbackReply(mode, places, prompt), nearby: publicPlaces, suggestions, source: 'verified-data-fallback' });
+      return Response.json({ reply: `Nhận diện ảnh hiện chưa sẵn sàng; gợi ý sau lấy từ danh mục địa điểm, chưa xác định được nội dung ảnh. ${fallbackReply(mode, places, prompt)}${places.some(place => place.verification_status !== 'verified') ? ' Giá, giờ và nội dung cần được xác nhận với địa điểm trước khi đi.' : ''}`, nearby: publicPlaces, suggestions, source: 'catalog-fallback' });
     }
 
     const knowledge = places.map((place, index) => {

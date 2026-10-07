@@ -4,7 +4,8 @@ import { parsePlaceRow, preparePlacePayload } from '@/lib/place-data';
 import { requireAdmin, requireRoles } from '@/lib/auth';
 import { writeAudit } from '@/lib/audit';
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   const db = getDb();
   const place = db.prepare('SELECT * FROM places WHERE id = ?').get(params.id) as any;
   if (!place) return Response.json({ error: 'Place not found' }, { status: 404 });
@@ -17,7 +18,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 // PUT /api/places/[id]
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   try {
     const access = requireRoles(req, ['admin', 'reviewer', 'collector']);
     if (access instanceof Response) return access;
@@ -62,7 +64,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 // DELETE /api/places/[id]
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params;
   try {
     const admin = requireAdmin(req);
     if (admin instanceof Response) return admin;

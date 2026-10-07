@@ -5,22 +5,14 @@ import { useRouter } from 'next/navigation';
 export default function OnboardingPage() {
   const router = useRouter();
   const [mode, setMode] = useState<'intro' | 'login' | 'register'>('intro');
-  const [email, setEmail] = useState('demo@huevivu.app');
-  const [password, setPassword] = useState('demo123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleDemo = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/auth/demo', { method: 'POST' });
-      const data = await res.json();
-      if (data.token) {
-        localStorage.setItem('hv_token', data.token);
-        router.push('/');
-      } else { setError(data.error); setLoading(false); }
-    } catch { setError('Lỗi kết nối'); setLoading(false); }
+    router.push('/flow');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -47,22 +39,23 @@ export default function OnboardingPage() {
         </div>
         <div style={{ padding: '0 32px 40px', textAlign: 'center', position: 'relative', zIndex: 10, marginTop: '-80px', maxWidth: 500, width: '100%' }}>
           <div className="ai-badge" style={{ marginBottom: 20 }}>
-            <span className="ai-badge-dot" />AI Travel Companion
+            <span className="ai-badge-dot" />Bạn đồng hành khám phá Huế
           </div>
           <h1 style={{ fontSize: '2.5rem', fontWeight: 800, color: 'var(--navy)', lineHeight: 1.1, letterSpacing: '-0.04em', marginBottom: 16 }}>
             Khám phá Huế<br />
             <span style={{ background: 'linear-gradient(135deg, var(--coral), var(--warm-orange))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Theo cách của bạn</span>
           </h1>
           <p style={{ fontSize: '0.9375rem', color: 'var(--navy-muted)', lineHeight: 1.6, marginBottom: 40, padding: '0 10px' }}>
-            Trải nghiệm văn hóa Cố Đô với lịch trình cá nhân hóa hoàn toàn từ AI.
+            Chọn số ngày và sở thích để HueViVu gợi ý điểm đến, giờ tham quan và thời gian nghỉ. Bạn có thể xem rồi chỉnh lịch trước khi đi.
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <button onClick={() => setMode('register')} className="btn-primary" style={{ width: '100%' }}>Bắt đầu trải nghiệm</button>
             <button onClick={() => setMode('login')} className="btn-secondary" style={{ width: '100%' }}>Đã có tài khoản</button>
             <button onClick={handleDemo} style={{ background: 'none', border: 'none', color: 'var(--coral)', fontSize: '0.875rem', fontWeight: 600, padding: '12px', cursor: 'pointer', fontFamily: 'var(--font)' }}>
-              Trải nghiệm nhanh (Demo)
+              Tạo lịch trình không cần tài khoản
             </button>
           </div>
+          <p style={{ fontSize: '.8125rem', color: 'var(--navy-muted)', marginTop: 12 }}>Lịch trình khách được giữ trên trình duyệt này. Hãy dùng cùng trình duyệt để mở lại chuyến đi.</p>
         </div>
       </div>
     );

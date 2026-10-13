@@ -1,36 +1,51 @@
 'use client';
+import { getHueClock, scheduledMinutes } from '@/lib/travel-clock';
+import { nearestRouteProgress, type RoutePoint, type TripRoute } from '@/lib/navigation-route';
 
 type Props = {
   feasibility: any; activeDay: number; expanded: boolean; onToggle: () => void;
   onPreview: () => void; previewing: boolean; preview: any | null;
   onApply: () => void; applying: boolean; onCancelPreview: () => void;
+  compact?: boolean;
+  measuredRoute?: TripRoute | null; userLocation?: RoutePoint | null;
+  activities?: Array<{ name: string; time?: string }>;
+  onReviewRoute?: () => void;
 };
 
 function overview(feasibility: any) {
   const issues = feasibility.days?.flatMap((day: any) => day.issues || []) || [];
   const conflicts = issues.filter((issue: any) => issue.code === 'time_conflict').length;
   const closed = issues.filter((issue: any) => issue.code === 'closed').length;
-  if (feasibility.score === 0) return { title: 'Lịch trình đang quá dày để đi thoải mái', detail: `Có ${feasibility.error_count || conflicts} xung đột lớn. Bạn có thể phải chạy vội, đến trễ hoặc bỏ dở một số điểm.`, tone: 'risk' };
-  if (closed) return { title: 'Một số điểm có thể đóng cửa khi bạn đến', detail: `HueViVu tìm thấy ${closed} điểm chưa khớp giờ mở cửa.`, tone: 'risk' };
-  if (conflicts) return { title: 'Bạn chưa có đủ thời gian giữa các điểm', detail: `${conflicts} chặng chưa tính đủ thời gian tham quan, nghỉ và di chuyển.`, tone: 'risk' };
-  if (feasibility.score < 85) return { title: 'Lịch trình có thể đi, nhưng sẽ hơi vội', detail: `Có ${feasibility.issue_count} điều nên chỉnh để chuyến đi nhẹ nhàng hơn.`, tone: 'caution' };
-  if (issues.some((issue: any) => issue.code === 'unverified_details')) return { title: 'Giờ đi hợp lý, nhưng cần xác nhận thông tin', detail: 'Một số giá và giờ mở cửa chưa được xác minh. Kiểm tra với địa điểm trước khi khởi hành.', tone: 'caution' };
-  return { title: 'Thời gian chuyến đi đang hợp lý', detail: 'Thời gian tham quan, nghỉ và di chuyển đã được ước tính. Kiểm tra thông tin địa điểm trước khi đi.', tone: 'good' };
+  if (feasibility.score === 0) return { title: 'Lịch hơi dày', detail: `Có ${feasibility.error_count || conflicts} xung đột lớn. Nên sắp xếp lại.`, tone: 'risk' };
+  if (closed) return { title: 'Có điểm có thể đóng cửa', detail: `HueViVu tìm thấy ${closed} điểm chưa khớp giờ mở cửa.`, tone: 'risk' };
+  if (conflicts) return { title: 'Cần thêm thời gian di chuyển', detail: `${conflicts} chặng chưa tính đủ thời gian tham quan, nghỉ và di chuyển.`, tone: 'risk' };
+  if (feasibility.score < 85) return { title: 'Nên giãn nhịp đi', detail: `Có ${feasibility.issue_count} điều nên chỉnh để chuyến đi nhẹ nhàng hơn.`, tone: 'caution' };
+  if (issues.some((issue: any) => issue.code === 'unverified_details')) return { title: 'Cần xác nhận giờ mở cửa', detail: 'Xác nhận giá và giờ với địa điểm.', tone: 'caution' };
+  return { title: 'Nhịp đi hợp lý', detail: 'Đã tính thời gian tham quan, nghỉ và di chuyển.', tone: 'good' };
 }
 
-export default function FeasibilityAssistant({ feasibility, activeDay, expanded, onToggle, onPreview, previewing, preview, onApply, applying, onCancelPreview }: Props) {
+export default function FeasibilityAssistant({ feasibility, activeDay, expanded, onToggle, onPreview, previewing, preview, onApply, applying, onCancelPreview, compact = false, measuredRoute, userLocation, activities, onReviewRoute }: Props) {
   const copy = overview(feasibility);
   const color = copy.tone === 'good' ? '#15803D' : copy.tone === 'caution' ? '#B45309' : '#B91C1C';
   const background = copy.tone === 'good' ? 'rgba(34,197,94,.07)' : copy.tone === 'caution' ? 'rgba(245,158,11,.08)' : 'rgba(239,68,68,.07)';
   const dayIssues = feasibility.days?.[activeDay]?.issues || [];
-  return <section style={{ margin: '0 20px 12px' }}>
-    <div style={{ padding: 14, background, border: `1px solid ${color}25`, borderRadius: 'var(--radius-lg)' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 11 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 15, background: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 8px rgba(26,29,59,.06)' }}><strong style={{ color, fontSize: '.95rem' }}>{feasibility.score}</strong><span style={{ fontSize: '.52rem', color: 'var(--gray-soft)' }}>/100</span></div>
-        <div style={{ flex: 1 }}><p style={{ margin: 0, fontWeight: 800, fontSize: '.9rem', color: 'var(--navy)', lineHeight: 1.35 }}>{copy.title}</p><p style={{ margin: '4px 0 0', fontSize: '.75rem', color: 'var(--navy-muted)', lineHeight: 1.5 }}>{copy.detail}</p></div>
+  const routeProgress = measuredRoute?.provider === 'google' && userLocation ? nearestRouteProgress(measuredRoute.points, userLocation) : null;
+  const routeMinutes = measuredRoute?.provider === 'google' ? Math.max(1, Math.ceil(measuredRoute.durationSeconds * (1 - (routeProgress?.fraction || 0)) / 60)) : null;
+  const schedule = scheduledMinutes(activities?.[measuredRoute?.destinationIndex ?? -1]?.time);
+  const routeLate = routeMinutes !== null && schedule !== null && getHueClock().minutes + routeMinutes > schedule + 10;
+  return <section style={{ margin: compact ? '0 20px 8px' : '0 20px 12px' }}>
+    <div style={{ padding: compact ? '8px 12px' : 14, background, border: `1px solid ${color}25`, borderRadius: compact ? 'var(--radius-md)' : 'var(--radius-lg)' }}>
+      <div style={{ display: 'flex', alignItems: compact ? 'center' : 'flex-start', gap: compact ? 8 : 11 }}>
+        <div style={{ width: compact ? 32 : 44, height: compact ? 32 : 44, borderRadius: compact ? 10 : 15, background: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 8px rgba(26,29,59,.06)' }}><strong style={{ color, fontSize: compact ? '.83rem' : '.95rem' }}>{feasibility.score}</strong><span style={{ fontSize: '.52rem', color: 'var(--gray-soft)' }}>/100</span></div>
+        <div style={{ flex: 1, minWidth: 0 }}><p style={{ margin: 0, fontWeight: 800, fontSize: compact ? '.8rem' : '.9rem', color: 'var(--navy)', lineHeight: 1.35 }}>{copy.title}</p><p style={{ margin: compact ? '2px 0 0' : '4px 0 0', fontSize: '.75rem', color: 'var(--navy-muted)', lineHeight: compact ? 1.35 : 1.5 }}>{copy.detail}</p></div>
+        {compact && <button className="trip-compact-control" aria-expanded={expanded} onClick={onToggle} style={{ border: 'none', background: 'transparent', color: 'var(--navy-muted)', flexShrink: 0, fontSize: '.72rem' }}>{expanded ? 'Thu gọn' : `Chi tiết (${feasibility.issue_count})`}</button>}
       </div>
-      {feasibility.score < 85 && !preview && <button onClick={onPreview} disabled={previewing} style={{ width: '100%', marginTop: 12, padding: '11px 14px', border: 'none', borderRadius: 'var(--radius-full)', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', color: 'white', fontWeight: 800, cursor: 'pointer', opacity: previewing ? .65 : 1 }}>{previewing ? 'HueViVu đang tìm phương án dễ đi hơn…' : '✨ Để HueViVu sắp xếp lại'}</button>}
-      <button onClick={onToggle} style={{ width: '100%', marginTop: 8, padding: 7, border: 'none', background: 'transparent', color: 'var(--navy-muted)', fontSize: '.72rem', fontWeight: 650, cursor: 'pointer' }}>{expanded ? 'Ẩn giải thích' : `Vì sao HueViVu đánh giá như vậy? (${feasibility.issue_count})`}</button>
+      {routeMinutes !== null && <div role="status" style={{ marginTop: 8, paddingTop: 8, borderTop: `1px solid ${color}25`, fontSize: '.75rem', lineHeight: 1.45, color: 'var(--navy)' }}>
+        Theo đường đi vừa tính: còn khoảng {routeMinutes} phút tới {activities?.[measuredRoute!.destinationIndex]?.name || 'điểm tiếp theo'}. {routeLate ? 'Có thể trễ giờ dự kiến.' : 'Hãy đối chiếu giờ mở cửa trước khi tới.'}
+        {routeLate && onReviewRoute && <button className="mood-chip" onClick={onReviewRoute} style={{ minHeight: 44, marginLeft: 6 }}>Xem đổi lịch</button>}
+      </div>}
+      {feasibility.score < 85 && !preview && <button onClick={onPreview} disabled={previewing} style={{ width: '100%', marginTop: 12, padding: '11px 14px', border: 'none', borderRadius: 'var(--radius-full)', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', color: 'white', fontWeight: 800, cursor: 'pointer', opacity: previewing ? .65 : 1 }}>{previewing ? 'Đang sắp xếp…' : '✨ Sắp xếp lại'}</button>}
+      {!compact && <button aria-expanded={expanded} onClick={onToggle} style={{ width: '100%', marginTop: 8, padding: 7, border: 'none', background: 'transparent', color: 'var(--navy-muted)', fontSize: '.72rem', fontWeight: 650, cursor: 'pointer' }}>{expanded ? 'Ẩn giải thích' : `Xem chi tiết (${feasibility.issue_count})`}</button>}
     </div>
 
     {preview && <div style={{ marginTop: 8, padding: 14, background: 'white', border: '1px solid rgba(255,127,107,.2)', borderRadius: 'var(--radius-lg)', boxShadow: '0 8px 24px rgba(26,29,59,.08)' }}>

@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const ts = require('typescript');
+let fixtures = [];
+function load(relative) {
+  const file = path.resolve(relative);
+  const module = { exports: {} };
+  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+  const localRequire = request => request === './db' ? { getDb: () => ({ prepare: () => ({ all: () => fixtures.map(place => ({ ...place })) }) }) } : request.startsWith('.') ? load(path.resolve(path.dirname(file), request + '.ts')) : require(request);
+  vm.runInThisContext('(function(require,module,exports){' + code + '\n})', { filename: file })(localRequire, module, module.exports);
+  return module.exports;
+}
+const { generateAstarTrip } = load('src/lib/astar.ts');
+const basePlace = { lat: 16.4637, lng: 107.5909, category: 'food', avg_visit_min: 45, popularity: .5, rating: 4, verification_status: 'verified', meal_type: 'any', opening_hours: '{}', indoor: 0 };
+const categories = ['food', 'food', 'cafe', 'temple', 'nature', 'cafe', 'market', 'craft_village', 'experience'];
+fixtures = categories.map((category, index) => ({ ...basePlace, category, id: 'place_' + index, name: 'Fixture ' + index, indoor: index % 2 }));
+const input = { duration: 1, styles: ['food'], companion: 'solo', budget: 600000, startDate: '2026-10-12' };
+const indoor = generateAstarTrip({ ...input, indoorPreferred: true });
+assert.equal(fixtures.find(place => place.id === indoor.days[0].activities[0].place_id).indoor, 1);
+assert.ok(indoor.days[0].activities.some(activity => fixtures.find(place => place.id === activity.place_id)?.indoor === 0), 'soft preference must allow outdoor activities');
+const relaxed = generateAstarTrip({ ...input, pacing: 'relaxed' });
+const packed = generateAstarTrip({ ...input, pacing: 'packed' });
+assert.ok(relaxed.days[0].activities.filter(activity => activity.type !== 'rest').length <= 6);
+assert.ok(packed.days[0].activities.filter(activity => activity.type !== 'rest').length <= 8);
+assert.ok(packed.days[0].activities.length > relaxed.days[0].activities.length);
+fixtures.unshift({ ...basePlace, id: 'closed', name: 'Closed indoor', indoor: 1, opening_hours: JSON.stringify({ mon: [{ open: '23:00', close: '23:30' }] }) });
+assert.ok(!generateAstarTrip({ ...input, indoorPreferred: true }).days[0].activities.some(activity => activity.place_id === 'closed'), 'indoor priority cannot bypass closure');
+fixtures = fixtures.filter(place => !place.indoor);
+assert.ok(generateAstarTrip({ ...input, indoorPreferred: true }).days[0].activities.length > 0, 'missing indoor corpus must not empty trip');
+console.log('PASS planner: indoor priority, soft outdoor fallback, relaxed/packed limits, opening-hour constraints');

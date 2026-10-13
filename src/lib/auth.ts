@@ -4,6 +4,9 @@ import { getDb } from './db';
 import { randomBytes } from 'crypto';
 
 const authGlobal = globalThis as typeof globalThis & { huevivuDevSecret?: string };
+export function isLegacyDemoLoginEnabled(): boolean {
+  return process.env.NODE_ENV === 'development' && process.env.ALLOW_LEGACY_DEMO_LOGIN === '1';
+}
 function getSecret(): string {
   const configured = process.env.JWT_SECRET;
   if (configured && configured.length >= 32 && configured !== 'huevivu_dev_secret_do_not_use_in_prod') return configured;
@@ -12,13 +15,13 @@ function getSecret(): string {
 }
 
 export function generateToken(userId: string): string {
-  return jwt.sign({ userId }, getSecret(), { expiresIn: '30d', algorithm: 'HS256' });
+  return jwt.sign({ userId, ...(userId === 'user_demo001' && isLegacyDemoLoginEnabled() ? { localDemoTest: true } : {}) }, getSecret(), { expiresIn: '30d', algorithm: 'HS256' });
 }
 
-export function verifyToken(token: string): { userId: string } | null {
+export function verifyToken(token: string): { userId: string; localDemoTest?: true } | null {
   try {
     const payload = jwt.verify(token, getSecret(), { algorithms: ['HS256'] });
-    return typeof payload === 'object' && typeof payload.userId === 'string' ? { userId: payload.userId } : null;
+    return typeof payload === 'object' && typeof payload.userId === 'string' ? { userId: payload.userId, ...(payload.localDemoTest === true ? { localDemoTest: true } : {}) } : null;
   } catch {
     return null;
   }
@@ -28,7 +31,7 @@ export function getAuthUserId(req: NextRequest): string | null {
   const auth = req.headers.get('authorization');
   if (!auth || !auth.startsWith('Bearer ')) return null;
   const payload = verifyToken(auth.slice(7));
-  if (!payload?.userId || payload.userId === 'user_demo001') return null;
+  if (!payload?.userId || (payload.userId === 'user_demo001' && (!isLegacyDemoLoginEnabled() || !payload.localDemoTest))) return null;
   return getDb().prepare('SELECT id FROM users WHERE id = ?').get(payload.userId) ? payload.userId : null;
 }
 

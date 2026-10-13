@@ -13,8 +13,8 @@ export async function GET(req: NextRequest) {
     return { ...category, total: rows.length, verified: rows.filter(place => place.verification_status === 'verified').length, published: rows.filter(place => place.publication_status === 'published').length, average_quality: rows.length ? Math.round(rows.reduce((sum, place) => sum + place.completeness_score, 0) / rows.length) : 0 };
   });
   const missing = {
-    hours: places.filter(place => !place.hours && !Object.values(place.opening_hours || {}).some((items: any) => items.length)).length,
-    source: places.filter(place => !place.source_url).length,
+    hours: places.filter(place => !Object.values(place.opening_hours || {}).some((items: any) => items.length)).length,
+    source: places.filter(place => !place.source_name?.trim() || (!place.data_trust?.sourceUrl && !place.verification_notes?.trim())).length,
     image: places.filter(place => !place.img).length,
     phone: places.filter(place => !place.phone).length,
     description: places.filter(place => !place.description || place.description.length < 60).length,

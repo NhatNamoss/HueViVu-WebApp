@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { PLACE_CATEGORIES, isFoodCategory } from '@/lib/place-taxonomy';
+import { verificationGaps } from '@/lib/place-trust';
 import { authenticatedHeaders } from '@/lib/client-auth';
 import { emptyWeeklyHours, parseOpeningHours, WEEK_DAYS, weeklyHoursSummary, type DayKey, type WeeklyHours } from '@/lib/opening-hours';
 
@@ -16,7 +17,7 @@ const ACCESSIBILITY = ['Xe lăn toàn diện', 'Xe lăn một phần', 'Xe đẩ
 const TIMES = ['Sáng sớm', 'Sáng', 'Trưa', 'Chiều', 'Chiều muộn', 'Tối', 'Đêm'];
 
 const emptyForm = {
-  name: '', category: 'heritage', description: '', address: '', price: 'Miễn phí', img: '',
+  name: '', category: 'heritage', description: '', address: '', price: '', img: '',
   lat: '16.4637', lng: '107.5909', phone: '', website: '', hours: '', hours_time: '', hours_note: '',
   opening_hours: emptyWeeklyHours() as WeeklyHours,
   ai_insight: '', rating: '4.5', popularity: '0.5', avg_visit_min: '90', meal_type: '', indoor: false,
@@ -111,7 +112,7 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
       ['Tên', cleanText(form.name)], ['Danh mục', form.category], ['Mô tả ≥60 ký tự', cleanText(form.description).length >= 60],
       ['Địa chỉ', cleanText(form.address)], ['Tọa độ', Number(form.lat) && Number(form.lng)], ['Ảnh', cleanText(form.img)],
       ['Giờ mở cửa', cleanText(form.hours) || cleanText(form.hours_time) || weeklyHoursSummary(form.opening_hours)], ['Nguồn', cleanText(form.source_name)],
-      ['URL nguồn', cleanText(form.source_url)], ['Người kiểm chứng', cleanText(form.verified_by)],
+      ['URL hoặc ghi nhận khảo sát', cleanText(form.source_url) || cleanText(form.verification_notes)], ['Người kiểm chứng', cleanText(form.verified_by)],
       ['Điểm nổi bật', listValue(form.highlights).length], ['Mẹo thực tế', listValue(form.tips).length],
     ] as [string, any][];
     const missing = checks.filter(([, ok]) => !ok).map(([label]) => label);
@@ -142,12 +143,13 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
     catch{setMessage('Không thể kiểm tra trùng lúc này.')}finally{setCheckingDuplicates(false)}
   };
 
-  const submit = async (status: 'draft' | 'reviewed' | 'verified', publicationStatus?: 'draft' | 'published' | 'archived') => {
+  const submit = async (status: 'draft' | 'reviewed' | 'verified', publicationStatus?: 'draft' | 'published' | 'archived', confirmVerification = true) => {
     if (!cleanText(form.name)) return setMessage('Cần nhập tên địa điểm.');
-    if (status === 'verified' && quality.score < 80) return setMessage(`Chưa thể xác minh: còn thiếu ${quality.missing.join(', ')}.`);
+    const gaps = verificationGaps(form);
+    if (status === 'verified' && confirmVerification && gaps.length) return setMessage(`Cần bổ sung: ${gaps.join(', ')}.`);
     setSaving(true); setMessage('');
     const payload = {
-      ...form, verification_status: status, publication_status: publicationStatus || form.publication_status, allow_duplicate: allowDuplicate,
+      ...form, verification_status: status, publication_status: publicationStatus || form.publication_status, allow_duplicate: allowDuplicate, confirm_verification: status === 'verified' && confirmVerification,
       hours: form.hours || weeklyHoursSummary(form.opening_hours),
       rating: Number(form.rating), popularity: Number(form.popularity), avg_visit_min: Number(form.avg_visit_min),
       highlights: listValue(form.highlights), tips: listValue(form.tips), specialties: listValue(form.specialties), tags: listValue(form.tags),
@@ -168,18 +170,18 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
   const section = 'bg-white p-5 md:p-6 rounded-2xl border border-gray-100 shadow-sm space-y-5';
   return (
     <form onSubmit={event => event.preventDefault()} className="space-y-6 pb-28">
-      <div className="sticky top-16 z-10 bg-white/95 backdrop-blur border border-gray-200 rounded-2xl p-4 shadow-sm">
+      <div className="sticky top-24 sm:top-16 z-10 bg-white/95 backdrop-blur border border-gray-200 rounded-2xl p-4 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center gap-3">
           <div className="flex-1">
             <div className="flex justify-between text-sm font-semibold"><span>Độ đầy đủ dữ liệu</span><span className={quality.score >= 80 ? 'text-green-600' : 'text-orange-600'}>{quality.score}%</span></div>
             <div className="h-2 bg-gray-100 rounded-full mt-2 overflow-hidden"><div className="h-full bg-gradient-to-r from-orange-400 to-green-500" style={{ width: `${quality.score}%` }} /></div>
             {quality.missing.length > 0 && <p className="text-xs text-gray-500 mt-2">Còn thiếu: {quality.missing.join(' · ')}</p>}
           </div>
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 sm:flex gap-2">
             <button type="button" disabled={saving} onClick={() => submit('draft')} className="px-4 py-2 border rounded-xl text-sm font-semibold">Lưu nháp</button>
             <button type="button" disabled={saving} onClick={() => submit('reviewed')} className="px-4 py-2 bg-amber-100 text-amber-800 rounded-xl text-sm font-semibold">Chờ duyệt</button>
-            <button type="button" disabled={saving || quality.score < 80 || currentRole === 'collector'} onClick={() => submit('verified')} className="px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40">✓ Xác minh</button>
-            {currentRole==='admin'&&<button type="button" disabled={saving||quality.score<80} onClick={()=>submit('verified','published')} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40">🚀 Xác minh & xuất bản</button>}
+            <button type="button" disabled={saving || currentRole === 'collector'} onClick={() => submit('verified')} className="px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40">✓ Xác minh</button>
+            {currentRole==='admin'&&<button type="button" disabled={saving} onClick={()=>submit('verified','published')} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold disabled:opacity-40">🚀 Xác minh & xuất bản</button>}
           </div>
         </div>
         {message && <p className="text-sm mt-3 px-3 py-2 bg-orange-50 text-orange-800 rounded-lg">{message}</p>}
@@ -254,10 +256,10 @@ export default function PlaceForm({ initialData = null }: { initialData?: any })
 
       <section className={`${section} border-2 border-green-200`}>
         <div><h2 className="text-lg font-bold text-gray-900">5. Bằng chứng xác minh</h2><p className="text-sm text-gray-500">Không tự động thu thập. Người nhập chịu trách nhiệm đối chiếu nguồn và ghi rõ ghi chú.</p></div>
-        <div className="grid md:grid-cols-2 gap-4"><Field label="Tên nguồn" {...fp('source_name')} required placeholder="Website chính thức / khảo sát tại chỗ" /><Field label="URL nguồn" {...fp('source_url')} type="url" placeholder="https://..." /></div>
-        <div className="grid md:grid-cols-2 gap-4"><Field label="Người kiểm chứng" {...fp('verified_by')} required /><Field label="Lần xác minh gần nhất" {...fp('verified_at')} type="datetime-local" /></div>
-        <div className="grid md:grid-cols-2 gap-4"><label className="space-y-1.5"><span className="text-sm font-medium text-gray-700">Chu kỳ kiểm tra lại</span><select value={form.reverify_after_days} onChange={event=>set('reverify_after_days',event.target.value)} className={fieldClass}><option value="30">30 ngày — dữ liệu biến động cao</option><option value="60">60 ngày</option><option value="90">90 ngày — mặc định</option></select></label><div className="p-3 bg-gray-50 rounded-xl"><p className="text-xs text-gray-500">Trạng thái xuất bản</p><p className="font-semibold mt-1">{form.publication_status==='published'?'🔵 Đang hiển thị trên ứng dụng':form.publication_status==='archived'?'⚫ Đã lưu trữ':'🟠 Chưa xuất bản'}</p>{currentRole==='admin'&&initialData&&<div className="flex gap-2 mt-2"><button type="button" onClick={()=>submit(form.verification_status as any,'published')} className="text-xs font-semibold text-blue-600">Xuất bản</button><button type="button" onClick={()=>submit(form.verification_status as any,'archived')} className="text-xs font-semibold text-gray-500">Lưu trữ</button></div>}</div></div>
-        <label className="space-y-1.5 block"><span className="text-sm font-medium text-gray-700">Ghi chú kiểm chứng</span><textarea value={form.verification_notes} onChange={e => set('verification_notes', e.target.value)} rows={3} className={fieldClass} placeholder="Đã gọi điện xác nhận giờ mở cửa; giá vé kiểm tra tại quầy..." /></label>
+        <div className="grid md:grid-cols-2 gap-4"><Field label="Tên nguồn" {...fp('source_name')} required placeholder="Website chính thức / khảo sát tại chỗ" /><Field label="URL nguồn" {...fp('source_url')} type="url" hint="Không có URL: ghi cách khảo sát bên dưới." placeholder="https://..." /></div>
+        <div className="grid md:grid-cols-2 gap-4"><Field label="Người kiểm chứng" {...fp('verified_by')} required /><div><p className="text-sm font-medium text-gray-700">Lần xác minh gần nhất</p><p className="text-sm text-gray-500 mt-2">{form.verified_at ? new Date(form.verified_at).toLocaleString('vi-VN') : 'Chưa xác minh'}</p><p className="text-xs text-gray-400">Ngày được ghi nhận khi bạn bấm xác minh.</p></div></div>
+        <div className="grid md:grid-cols-2 gap-4"><label className="space-y-1.5"><span className="text-sm font-medium text-gray-700">Chu kỳ kiểm tra lại</span><select value={form.reverify_after_days} onChange={event=>set('reverify_after_days',event.target.value)} className={fieldClass}><option value="30">30 ngày — dữ liệu biến động cao</option><option value="60">60 ngày</option><option value="90">90 ngày — mặc định</option></select><p className="text-xs text-gray-400">Giờ/giá/liên hệ cần kiểm tra ít nhất mỗi 30 ngày.</p></label><div className="p-3 bg-gray-50 rounded-xl"><p className="text-xs text-gray-500">Trạng thái xuất bản</p><p className="font-semibold mt-1">{form.publication_status==='published'?'🔵 Đang hiển thị trên ứng dụng':form.publication_status==='archived'?'⚫ Đã lưu trữ':'🟠 Chưa xuất bản'}</p>{currentRole==='admin'&&initialData&&<div className="flex gap-2 mt-2"><button type="button" onClick={()=>submit(form.verification_status as any,'published',false)} className="text-xs font-semibold text-blue-600">Xuất bản</button><button type="button" onClick={()=>submit(form.verification_status as any,'archived',false)} className="text-xs font-semibold text-gray-500">Lưu trữ</button></div>}</div></div>
+        <label className="space-y-1.5 block"><span className="text-sm font-medium text-gray-700">Ghi chú kiểm chứng</span><textarea value={form.verification_notes} onChange={e => set('verification_notes', e.target.value)} rows={3} className={fieldClass} placeholder="Cách kiểm tra, ngày khảo sát, giờ/giá đã xác nhận; ghi rõ giá hoặc số điện thoại chưa có…" /></label>
       </section>
     </form>
   );

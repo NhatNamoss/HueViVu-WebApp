@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
-import { generateToken } from '@/lib/auth';
+import { generateToken, isLegacyDemoLoginEnabled } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
 
 export async function POST(req: NextRequest) {
@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
 
     const db = getDb();
     const user = db.prepare('SELECT * FROM users WHERE lower(email) = ?').get(String(email).trim().toLowerCase()) as any;
-    if (!user || user.id === 'user_demo001') return Response.json({ error: 'Email hoặc mật khẩu không đúng.' }, { status: 401 });
+    if (!user || (user.id === 'user_demo001' && !isLegacyDemoLoginEnabled())) return Response.json({ error: 'Email hoặc mật khẩu không đúng.' }, { status: 401 });
 
     if (!await bcrypt.compare(password, user.password_hash)) {
       return Response.json({ error: 'Email hoặc mật khẩu không đúng.' }, { status: 401 });

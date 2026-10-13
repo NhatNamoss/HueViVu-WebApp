@@ -2,11 +2,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSessionId, trackEvent } from '@/lib/analytics';
+import { PLACE_CATEGORIES } from '@/lib/place-taxonomy';
+import { plannerDefaults, validatePreferences, type TravelPreferences } from '@/lib/travel-preferences';
+import { getHueClock } from '@/lib/travel-clock';
 
 // ─── Types ────────────────────────────────────────────────────────
 type FlowState = {
   duration: string; companion: string; budget: string;
-  pacing: string; exploration: string; tags: string[]; startDate: string;
+  pacing: string; exploration: string; tags: string[]; startDate: string; indoorPreferred: boolean;
 };
 
 // ─── Step Config ──────────────────────────────────────────────────
@@ -50,11 +53,7 @@ const STEP_OPTIONS: Record<string, { value: string; label: string; emoji: string
   ],
 };
 
-const ALL_TAGS = [
-  '🏛️ Di sản Triều Nguyễn', '🍜 Ẩm thực đường phố', '☕ Cà phê & Trà',
-  '📸 Nhiếp ảnh', '🌿 Thiên nhiên sông Hương', '🛕 Chùa chiền tâm linh',
-  '🎭 Nghệ thuật truyền thống', '🛍️ Mua sắm & Thủ công', '🎵 Nhã nhạc Cung đình',
-];
+const ALL_TAGS = PLACE_CATEGORIES;
 
 const DURATION_WHISPERS: Record<string, string> = {
   '1': 'Chỉ 1 ngày — đủ để cảm nhận linh hồn cố đô nếu đi đúng chỗ.',
@@ -77,7 +76,7 @@ const COMPANION_BUDGET_WHISPERS: Record<string, string> = {
 type ChatMessage = { from: 'ai' | 'user'; text: string };
 
 const initialState: FlowState = {
-  duration: '', companion: '', budget: '', pacing: '', exploration: '', tags: [], startDate: '',
+  duration: '', companion: '', budget: '', pacing: '', exploration: '', tags: [], startDate: '', indoorPreferred: false,
 };
 
 
@@ -96,6 +95,34 @@ export default function FlowPage() {
   const generationRef = useRef(false);
   const [advancing, setAdvancing] = useState(false);
   const [generationError, setGenerationError] = useState('');
+  const [savedPreferences, setSavedPreferences] = useState<TravelPreferences | null>(null);
+  const [preferencesLoading, setPreferencesLoading] = useState(false);
+  const [preferencesError, setPreferencesError] = useState('');
+  const [preferencesApplied, setPreferencesApplied] = useState(false);
+  const [preferencesRetry, setPreferencesRetry] = useState(0);
+
+  useEffect(() => {
+    const token = localStorage.getItem('hv_token');
+    if (!token) return;
+    const controller = new AbortController();
+    setPreferencesLoading(true); setPreferencesError('');
+    fetch('/api/profile/preferences', { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal })
+      .then(async response => {
+        if (response.status === 401) throw new Error('Phiên đã hết hạn. Bạn vẫn có thể tự chọn sở thích cho chuyến này.');
+        if (!response.ok) throw new Error();
+        return validatePreferences(await response.json());
+      })
+      .then(preferences => { if (!controller.signal.aborted) setSavedPreferences(preferences); })
+      .catch(error => { if (!controller.signal.aborted) setPreferencesError(error instanceof Error && error.message.startsWith('Phiên') ? error.message : 'Chưa tải được sở thích đã lưu. Bạn có thể thử lại hoặc tự chọn cho chuyến này.'); })
+      .finally(() => { if (!controller.signal.aborted) setPreferencesLoading(false); });
+    return () => controller.abort();
+  }, [preferencesRetry]);
+
+  const applySavedPreferences = () => {
+    if (!savedPreferences || generating || done || advancing) return;
+    setState(current => ({ ...current, ...plannerDefaults(savedPreferences) }));
+    setPreferencesApplied(true);
+  };
 
   useEffect(() => {
     getSessionId();
@@ -154,7 +181,7 @@ export default function FlowPage() {
     setGenerating(true);
     setChat(prev => [
       ...prev,
-      { from: 'user', text: `Sở thích: ${state.tags.join(', ')}${freeInput ? ' · ' + freeInput : ''}` },
+      { from: 'user', text: `Sở thích: ${state.tags.map(tag => PLACE_CATEGORIES.find(item => item.value === tag)?.label || tag).join(', ')}${freeInput ? ' · ' + freeInput : ''}` },
       { from: 'ai', text: 'Tuyệt! Đang tạo lịch trình cho bạn...' },
     ]);
     try {
@@ -165,9 +192,10 @@ export default function FlowPage() {
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({
           duration: state.duration,
-          styles: state.tags.map(t => t.replace(/^[\s\S]{1,2}\s/, '')),
+          styles: state.tags,
           companion: state.companion,
           pacing: state.pacing,
+          indoorPreferred: state.indoorPreferred,
           exploration: state.exploration,
           budget: state.budget === 'budget' ? 300000 : state.budget === 'moderate' ? 600000 : state.budget === 'comfort' ? 1000000 : 2000000,
           food: [],
@@ -220,6 +248,16 @@ export default function FlowPage() {
       </header>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px 20px 12px' }}>
+        {!generating && !done && <div style={{ marginBottom: 16 }}>
+          {preferencesLoading && <p role="status" style={{ fontSize: '.82rem', color: 'var(--navy-muted)' }}>Đang tải sở thích đã lưu… Bạn vẫn có thể tiếp tục chọn chuyến đi.</p>}
+          {preferencesError && <div role="status" style={{ fontSize: '.82rem', color: 'var(--navy-muted)' }}>{preferencesError} <button type="button" onClick={() => setPreferencesRetry(value => value + 1)}>Thử tải sở thích lại</button></div>}
+          {savedPreferences && <div className="card" style={{ padding: 14 }}>
+            <p style={{ fontWeight: 700, marginBottom: 6 }}>Sở thích từ hồ sơ</p>
+            <p style={{ color: 'var(--navy-muted)', fontSize: '.82rem', lineHeight: 1.6, marginBottom: 10 }}>{savedPreferences.categories.length ? savedPreferences.categories.map(category => PLACE_CATEGORIES.find(item => item.value === category)?.label).join(' · ') : 'Chưa chọn danh mục'} · {STEP_OPTIONS.pacing.find(item => item.value === savedPreferences.pacing)?.label}{savedPreferences.indoorPreferred ? ' · Ưu tiên trong nhà' : ''}</p>
+            <button type="button" disabled={advancing} onClick={applySavedPreferences} className="btn-primary" style={{ width: '100%' }}>Dùng sở thích đã lưu</button>
+            {preferencesApplied && <p role="status" style={{ fontSize: '.8rem', color: '#166534', marginTop: 10 }}>✓ Đã áp dụng cho chuyến này.</p>}
+          </div>}
+        </div>}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {chat.map((msg, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: msg.from === 'user' ? 'flex-end' : 'flex-start', gap: 10, alignItems: 'flex-end' }}>
@@ -241,7 +279,7 @@ export default function FlowPage() {
           {!isTagStep && STEP_OPTIONS[currentStepKey] && (
             <div style={{ display: 'grid', gridTemplateColumns: STEP_OPTIONS[currentStepKey].length <= 3 ? `repeat(${STEP_OPTIONS[currentStepKey].length}, 1fr)` : 'repeat(2, 1fr)', gap: 10 }}>
               {STEP_OPTIONS[currentStepKey].map(opt => (
-                <button key={opt.value} disabled={advancing} onClick={() => handlePick(currentStepKey, opt.value)} style={{ padding: '14px 10px', background: state[currentStepKey] === opt.value ? 'linear-gradient(135deg, var(--coral), var(--warm-orange))' : 'var(--card-bg)', border: `1.5px solid ${state[currentStepKey] === opt.value ? 'transparent' : 'rgba(26,29,59,0.08)'}`, borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, transition: 'all 0.2s var(--ease-spring)', boxShadow: state[currentStepKey] === opt.value ? 'var(--shadow-glow)' : 'none', fontFamily: 'var(--font)' }}>
+                <button key={opt.value} aria-pressed={state[currentStepKey] === opt.value} disabled={advancing} onClick={() => handlePick(currentStepKey, opt.value)} style={{ padding: '14px 10px', background: state[currentStepKey] === opt.value ? 'linear-gradient(135deg, var(--coral), var(--warm-orange))' : 'var(--card-bg)', border: `1.5px solid ${state[currentStepKey] === opt.value ? 'transparent' : 'rgba(26,29,59,0.08)'}`, borderRadius: 'var(--radius-md)', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, transition: 'all 0.2s var(--ease-spring)', boxShadow: state[currentStepKey] === opt.value ? 'var(--shadow-glow)' : 'none', fontFamily: 'var(--font)' }}>
                   <span style={{ fontSize: '1.5rem' }}>{opt.emoji}</span>
                   <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: state[currentStepKey] === opt.value ? 'white' : 'var(--navy)' }}>{opt.label}</span>
                 </button>
@@ -249,23 +287,25 @@ export default function FlowPage() {
             </div>
           )}
           {isTagStep && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="planner-finish">
+              <div className="planner-finish-heading"><h2>Chọn trải nghiệm</h2><span>{state.tags.length ? `${state.tags.length} đã chọn` : 'Chọn ít nhất 1'}</span></div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {ALL_TAGS.map(tag => (
-                  <button key={tag} onClick={() => handleTagToggle(tag)} style={{ padding: '8px 14px', background: state.tags.includes(tag) ? 'linear-gradient(135deg, var(--coral), var(--warm-orange))' : 'var(--card-bg)', border: `1.5px solid ${state.tags.includes(tag) ? 'transparent' : 'rgba(26,29,59,0.08)'}`, borderRadius: 'var(--radius-full)', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600, color: state.tags.includes(tag) ? 'white' : 'var(--navy)', transition: 'all 0.2s var(--ease-spring)', fontFamily: 'var(--font)' }}>
-                    {tag}
+                  <button key={tag.value} aria-pressed={state.tags.includes(tag.value)} onClick={() => handleTagToggle(tag.value)} style={{ padding: '8px 14px', background: state.tags.includes(tag.value) ? 'linear-gradient(135deg, var(--coral), var(--warm-orange))' : 'var(--card-bg)', border: `1.5px solid ${state.tags.includes(tag.value) ? 'transparent' : 'rgba(26,29,59,0.08)'}`, borderRadius: 'var(--radius-full)', cursor: 'pointer', fontSize: '0.8125rem', fontWeight: 600, color: state.tags.includes(tag.value) ? 'white' : 'var(--navy)', transition: 'all 0.2s var(--ease-spring)', fontFamily: 'var(--font)' }}>
+                    {tag.emoji} {tag.label}
                   </button>
                 ))}
               </div>
               <textarea value={freeInput} onChange={e => setFreeInput(e.target.value)} placeholder="Ghi chú thêm (tuỳ chọn)..." style={{ width: '100%', padding: '12px', background: 'var(--card-bg)', border: '1.5px solid rgba(26,29,59,0.08)', borderRadius: 'var(--radius-md)', fontFamily: 'var(--font)', fontSize: '0.9rem', outline: 'none', color: 'var(--navy)', resize: 'none', minHeight: 60, lineHeight: 1.5 }} />
-              <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--card-bg)', border: '1.5px solid rgba(26,29,59,0.08)', borderRadius: 'var(--radius-md)' }}><span style={{ fontSize: '1.1rem' }}>📅</span><span style={{ flex: 1, fontSize: '.8rem', fontWeight: 600, color: 'var(--navy)' }}>Ngày bắt đầu <small style={{ display: 'block', color: 'var(--navy-muted)', fontWeight: 400 }}>Giúp kiểm tra giờ mở cửa chính xác</small></span><input type="date" value={state.startDate} min={new Date().toISOString().slice(0, 10)} onChange={e => setState(prev => ({ ...prev, startDate: e.target.value }))} style={{ border: '1px solid rgba(26,29,59,.12)', borderRadius: 8, padding: '7px', color: 'var(--navy)' }} /></label>
-              <p style={{ fontSize: '.8125rem', color: 'var(--navy-muted)' }}>Chọn ít nhất một sở thích. HueViVu sẽ sắp xếp giờ tham quan, di chuyển và nghỉ; bạn xem lịch rồi điều chỉnh trước khi đi.</p>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: 'var(--card-bg)', border: '1.5px solid rgba(26,29,59,0.08)', borderRadius: 'var(--radius-md)' }}><span style={{ fontSize: '1.1rem' }}>📅</span><span style={{ flex: 1, fontSize: '.8rem', fontWeight: 600, color: 'var(--navy)' }}>Ngày bắt đầu</span><input type="date" value={state.startDate} min={getHueClock().date} onChange={e => setState(prev => ({ ...prev, startDate: e.target.value }))} style={{ border: '1px solid rgba(26,29,59,.12)', borderRadius: 8, padding: '7px', color: 'var(--navy)' }} /></label>
+              <label className="planner-indoor"><span>☂️ Ưu tiên trong nhà</span><input type="checkbox" checked={state.indoorPreferred} onChange={event => setState(current => ({ ...current, indoorPreferred: event.target.checked }))} /></label>
+              <details className="quiet-details"><summary>Lưu ý trước khi tạo</summary><p>Bạn có thể chỉnh lịch sau khi tạo. Giờ đi và chi phí là dự kiến; hãy xác nhận giờ mở cửa với địa điểm. Ưu tiên trong nhà vẫn có thể gồm điểm ngoài trời.</p></details>
               {generationError && <p role="alert" style={{ color: '#b91c1c', fontSize: '.875rem' }}>{generationError}</p>}
               <button onClick={handleGenerate} disabled={state.tags.length === 0} className="btn-primary btn-ripple" style={{ width: '100%', opacity: state.tags.length === 0 ? 0.5 : 1 }}>
-                ✨ Tạo hành trình của tôi
+                ✨ Tạo lịch trình
               </button>
               <button onClick={() => router.push('/tours-combo')} style={{ width: '100%', padding: '12px', background: 'none', border: '1.5px solid rgba(255,127,107,0.3)', borderRadius: 'var(--radius-md)', color: 'var(--coral)', fontWeight: 600, fontSize: '0.8125rem', cursor: 'pointer', fontFamily: 'var(--font)' }}>
-                🎫 Hoặc xem Combo Tour có sẵn
+                Xem tour có sẵn →
               </button>
             </div>
           )}

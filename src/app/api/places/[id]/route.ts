@@ -1,3 +1,4 @@
+import { applyVerificationPolicy } from '@/lib/place-trust';
 import { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
 import { parsePlaceRow, preparePlacePayload } from '@/lib/place-data';
@@ -32,6 +33,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     }
     const before = db.prepare('SELECT * FROM places WHERE id = ?').get(params.id);
     if (!before) return Response.json({ error: 'Place not found' }, { status: 404 });
+    try { applyVerificationPolicy(p, before as Record<string, any>, data.confirm_verification === true); } catch (error) { return Response.json({ error: (error as Error).message }, { status: 400 }); }
     if (access.role !== 'admin') p.publication_status = (before as any).publication_status || 'published';
 
     const stmt = db.prepare(`

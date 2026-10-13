@@ -42,10 +42,10 @@ export default function TripsPage() {
         <div>
           <p className="section-eyebrow" style={{ marginBottom: 2 }}>Hành trình của tôi</p>
           <h1 style={{ fontSize: '1.375rem', fontWeight: 600, color: 'var(--navy)' }}>
-            Mỗi chuyến đi, một <em style={{ color: 'var(--coral)' }}>kỷ niệm</em>
+            Chuyến đi của bạn
           </h1>
         </div>
-        <Link href="/flow" className="header-btn" style={{ color: 'var(--coral)', background: 'rgba(255,127,107,0.08)', border: '1px solid rgba(255,127,107,0.2)' }}>
+        <Link href="/flow" aria-label="Tạo lịch trình mới" className="header-btn" style={{ color: 'var(--coral)', background: 'rgba(255,127,107,0.08)', border: '1px solid rgba(255,127,107,0.2)' }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
           </svg>
@@ -89,17 +89,17 @@ export default function TripsPage() {
             </p>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--navy)', marginBottom: 8 }}>
               {activeTab === 'active'
-                ? 'Chưa có hành trình nào đang diễn ra'
+                ? 'Chưa có chuyến đi đang diễn ra'
                 : activeTab === 'upcoming'
-                ? 'Chuyến đi tiếp theo của bạn đang chờ...'
-                : 'Những kỷ niệm của bạn sẽ hiện ra ở đây'}
+                ? 'Sẵn sàng cho chuyến tiếp theo?'
+                : 'Chưa có chuyến đi đã hoàn thành'}
             </h3>
             <p style={{ color: 'var(--navy-muted)', fontSize: '0.875rem', lineHeight: 1.6, marginBottom: 20, maxWidth: 260, margin: '0 auto 20px' }}>
               {activeTab === 'active'
-                ? 'Hãy để AI lên một lịch trình Huế đặc biệt riêng cho bạn.'
+                ? 'Khám phá Huế theo cách của bạn.'
                 : activeTab === 'upcoming'
-                ? 'Đặt chuyến đi tiếp theo — chỉ vài câu trả lời, AI sẽ lộ trình cho bạn.'
-                : 'Đây là nơi lưu giữ những chuyến đi đã qua của bạn.'}
+                ? 'Chọn sở thích, để AI sắp xếp lịch.'
+                : 'Chuyến đi đã xong sẽ được lưu ở đây.'}
             </p>
             {activeTab !== 'past' && (
               <Link href="/flow" className="btn-ripple" style={{
@@ -110,7 +110,7 @@ export default function TripsPage() {
                 fontWeight: 700, fontSize: '0.9375rem',
                 boxShadow: 'var(--shadow-glow)',
               }}>
-                Lên kế hoạch với AI →
+                Tạo lịch trình →
               </Link>
             )}
           </div>

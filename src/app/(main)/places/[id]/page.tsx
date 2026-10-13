@@ -125,7 +125,7 @@ export default function PlaceDetailPage() {
       </div>
 
       <div style={{ padding: '24px 20px' }}>
-        {(place.verification_status !== 'verified' || place.needs_reverification) && <p style={{ padding: 12, marginBottom: 16, background: 'rgba(245,158,11,.08)', borderRadius: 12, fontSize: '.8125rem', lineHeight: 1.5 }}>Giá và giờ mở cửa chưa được xác nhận gần đây. Hãy kiểm tra với địa điểm trước khi đi để tránh đến lúc đóng cửa hoặc phát sinh chi phí.</p>}
+        <details className="quiet-details" style={{ marginBottom: 16, padding: '8px 12px', background: 'rgba(245,158,11,.06)', borderRadius: 12 }}><summary>{place.data_trust?.label || 'Chưa xác minh'} · Nguồn dữ liệu</summary><p>{place.source_name || 'Chưa có nguồn'}{place.data_trust?.sourceUrl && <> · <a href={place.data_trust.sourceUrl} target="_blank" rel="noopener noreferrer">Xem nguồn</a></>}{place.verified_at && <> · Kiểm tra {new Date(place.verified_at).toLocaleDateString('vi-VN')}</>}</p>{!place.data_trust?.operationalFresh && <p>Xác nhận giờ mở cửa và giá với địa điểm trước khi đi.</p>}</details>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 24 }}>
           <div className="card" style={{ padding: '14px', display: 'flex', gap: 10, alignItems: 'center' }}>
             <span style={{ fontSize: '1.25rem' }}>💰</span>

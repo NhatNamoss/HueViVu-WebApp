@@ -28,6 +28,29 @@ yarn-error.log*
 # local env files
 .env*.local
 
+# ChatGPT / AI coding session artifacts
+# Keep local conversation history, agent transcripts, checkpoints and tool state out of Git.
+.chatgpt/
+.chatgpt/**
+.openai/
+.openai/**
+.codex/
+.codex/**
+.cline/
+.cline/**
+.cursor/chats/
+.cursor/chats/**
+.cursor/agent-transcripts/
+.cursor/agent-transcripts/**
+**/*chatgpt*.json
+**/*chatgpt*.jsonl
+**/*chatgpt*.log
+**/*conversation*.json
+**/*conversation*.jsonl
+**/*transcript*.json
+**/*transcript*.jsonl
+**/*agent*.jsonl
+
 # vercel
 .vercel
 

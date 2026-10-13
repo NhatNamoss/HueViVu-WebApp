@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#FF7F6B">
+<title>HueViVu — Lịch trình trên máy</title>
+<style>
+*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;background:#fff9f7;color:#1a1d3b}main{max-width:720px;margin:32px auto;padding:0 20px 40px}h1{font-size:1.6rem;line-height:1.25}h2{font-size:1.2rem}h3{font-size:1rem}p{line-height:1.6;color:#5d6072}a{color:#94422f;overflow-wrap:anywhere}button,.button{font:inherit;cursor:pointer;border:1px solid #d7c2ba;border-radius:12px;padding:12px;background:white;color:#1a1d3b;text-decoration:none;display:inline-block}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #94422f;outline-offset:3px}.badge{display:inline-block;padding:8px 12px;border-radius:999px;background:#ffddd2;color:#853c2c;font-weight:700;font-size:13px}.card{background:white;border:1px solid #eeddd7;border-radius:18px;padding:18px;margin:16px 0}.trips{display:grid;gap:10px}.trips button{text-align:left;line-height:1.5}.trips button[aria-pressed=true]{border:2px solid #94422f;background:#fff1ea}.hint{font-size:.88rem}.activity{border-top:1px solid #eeddd7;padding:12px 0}.activity h3{margin:6px 0}.activity p{margin:6px 0}summary{cursor:pointer;padding:12px 0;font-weight:700}#message{min-height:1.5em}#retry{margin-top:8px}details{border-top:1px solid #eeddd7}small{display:block;color:#5d6072}noscript{display:block;padding:16px;background:#fff}
+</style>
+</head>
+<body>
+<main>
+<span class="badge" id="connection">ĐANG KIỂM TRA KẾT NỐI</span>
+<h1>Lịch trình đã lưu trên máy</h1>
+<p>Khi mạng yếu hoặc mất kết nối, bạn vẫn có thể đọc giờ đi, địa chỉ và chi phí dự kiến của những chuyến đã mở trên thiết bị này.</p>
+<p class="hint">Đây là bản lưu để đọc. Bản đồ, AI và việc chỉnh sửa cần kết nối mạng. Giờ mở cửa và giá có thể đã thay đổi; hãy kiểm tra lại với địa điểm trước khi đi.</p>
+<p id="message" role="status" aria-live="polite"></p>
+<section class="card" aria-labelledby="list-title"><h2 id="list-title">Chọn chuyến đi</h2><div id="trips" class="trips"></div></section>
+<section id="reader" class="card" hidden aria-labelledby="trip-title"></section>
+<a id="retry" class="button" href="/trips">Thử mở bản mới khi có mạng</a>
+<noscript>Trình duyệt cần bật JavaScript để đọc các bản lưu. Hãy bật JavaScript rồi mở lại trang.</noscript>
+</main>
+<script type="module">
+import { listCachedTrips, removeCachedTrip } from '/offline-trip-store.js';
+const list = document.getElementById('trips');
+const reader = document.getElementById('reader');
+const message = document.getElementById('message');
+const retry = document.getElementById('retry');
+const routeId = /^\/trips\/([^/]+)\/?$/.exec(location.pathname)?.[1];
+let selectedId = new URLSearchParams(location.search).get('trip') || (routeId ? decodeURIComponent(routeId) : null);
+function element(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text !== undefined && text !== null) node.textContent = String(text);
+  if (className) node.className = className;
+  return node;
+}
+function savedTime(value) {
+  return new Date(value).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+}
+function connection() {
+  document.getElementById('connection').textContent = navigator.onLine ? 'BẢN LƯU TRÊN MÁY' : 'ĐANG MẤT KẾT NỐI';
+}
+function render(feedback) {
+  const trips = listCachedTrips();
+  const selected = trips.find(item => item.data.id === selectedId);
+  list.replaceChildren(); reader.replaceChildren(); reader.hidden = !selected;
+  message.textContent = feedback || (!trips.length
+    ? 'Chưa có bản lưu dùng được trong phiên này. Khi có mạng, đăng nhập và mở chuyến đi để lưu trên máy. Nếu trình duyệt chặn lưu dữ liệu, hãy cho phép lưu rồi thử lại.'
+    : selectedId && !selected ? 'Chuyến này chưa được lưu hoặc bản lưu đã hết hạn. Bạn có thể chọn một chuyến khác bên dưới.' : 'Chọn một chuyến để xem bản lưu; có thể khác lịch mới nhất trên tài khoản.');
+  trips.forEach(item => {
+    const button = element('button', item.data.title);
+    button.type = 'button';
+    button.setAttribute('aria-pressed', String(item.data.id === selectedId));
+    button.append(element('small', 'Lưu lúc ' + savedTime(item.savedAt)));
+    button.addEventListener('click', () => {
+      selectedId = item.data.id; render('Đã mở bản lưu: ' + item.data.title);
+      reader.querySelector('h2').focus();
+    });
+    list.append(button);
+  });
+  if (!selected) { retry.href = '/trips'; return; }
+  const trip = selected.data;
+  retry.href = '/trips/' + encodeURIComponent(trip.id);
+  const title = element('h2', trip.title); title.id = 'trip-title'; title.tabIndex = -1;
+  reader.append(title, element('p', 'Lưu lúc ' + savedTime(selected.savedAt), 'hint'));
+  if (trip.summary) reader.append(element('p', trip.summary));
+  if (trip.total_cost_estimate) reader.append(element('p', 'Chi phí dự kiến: ' + trip.total_cost_estimate));
+  trip.itinerary.days.forEach((day, index) => {
+    const details = document.createElement('details'); details.open = index === 0;
+    details.append(element('summary', 'Ngày ' + (day.day || index + 1) + (day.theme ? ' · ' + day.theme : '')));
+    if (day.day_tip) details.append(element('p', day.day_tip, 'hint'));
+    day.activities.forEach(activity => {
+      const section = element('div', null, 'activity');
+      section.append(element('h3', (activity.time ? activity.time + ' · ' : '') + activity.name));
+      if (activity.location) section.append(element('p', activity.location));
+      if (activity.duration || activity.cost) section.append(element('p', [activity.duration, activity.cost].filter(Boolean).join(' · '), 'hint'));
+      if (activity.description) section.append(element('p', activity.description, 'hint'));
+      const link = element('a', 'Mở chỉ đường (cần mạng)');
+      const validCoords = Number.isFinite(activity.lat) && Number.isFinite(activity.lng) && Math.abs(activity.lat) <= 90 && Math.abs(activity.lng) <= 180;
+      link.href = validCoords
+        ? 'https://www.google.com/maps/dir/?api=1&destination=' + activity.lat + ',' + activity.lng
+        : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(activity.name + ' Hue Vietnam');
+      link.target = '_blank'; link.rel = 'noopener noreferrer';
+      section.append(link); details.append(section);
+    });
+    reader.append(details);
+  });
+  const remove = element('button', 'Xóa bản lưu trên thiết bị này'); remove.type = 'button';
+  remove.addEventListener('click', () => {
+    if (!confirm('Xóa bản lưu trên máy? Lịch trình trên tài khoản vẫn được giữ nguyên.')) return;
+    removeCachedTrip(trip.id); selectedId = null; render('Đã xóa bản lưu trên máy. Lịch trình trên tài khoản vẫn được giữ nguyên.');
+  });
+  reader.append(remove);
+}
+window.addEventListener('online', connection); window.addEventListener('offline', connection);
+window.addEventListener('storage', () => { render(); });
+connection(); render();
+</script>
+</body>
+</html>

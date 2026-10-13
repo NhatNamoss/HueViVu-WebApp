@@ -1,15 +1,17 @@
-﻿'use client';
+'use client';
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import PlaceCard from '@/components/ui/PlaceCard';
 import CategoryFilter from '@/components/ui/CategoryFilter';
 import WeatherWidget from '@/components/ui/WeatherWidget';
+import { useHueWeather } from '@/components/ui/useHueWeather';
 import ExploreMap from '@/components/ExploreMap';
 
 type Place = {
   id: string; name: string; category: string; description: string;
   rating: number; rating_count: number; price: string; duration: string;
   address: string; img: string; lat: number; lng: number; tags: string[];
+  preference_reasons?: string[];
 };
 
 const CATEGORIES = [
@@ -74,18 +76,24 @@ function ExploreInner() {
   const [category, setCategory] = useState('all');
   const [activeMood, setActiveMood] = useState('all');
   const [q, setQ] = useState('');
-  const [weather, setWeather] = useState<any>(null);
+  const { weather: weatherData, usableWeather: weather, refreshWeather } = useHueWeather();
   const [aiResponse, setAiResponse] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [mapExpanded, setMapExpanded] = useState(false);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [onlyOpen, setOnlyOpen] = useState(false);
+  const [onlyIndoor, setOnlyIndoor] = useState(false);
+  const [personalized, setPersonalized] = useState(true);
+  const [preferenceNotice, setPreferenceNotice] = useState('');
 
   // Read URL params on mount: ?cat=cafe or ?time=morning
   useEffect(() => {
     const cat = searchParams.get('cat');
     const time = searchParams.get('time');
+    setOnlyIndoor(searchParams.get('indoor') === 'true');
+    setOnlyOpen(searchParams.get('open') === 'true');
+    setCategory('all');
     if (cat && cat !== 'all') setCategory(cat);
     else if (time) {
       // map time-of-day to relevant category
@@ -122,7 +130,7 @@ function ExploreInner() {
   };
 
   useEffect(() => {
-    fetch('/api/weather').then(r => r.json()).then(data => setWeather(data._fallback ? null : data)).catch(() => {});
+
   }, []);
 
   useEffect(() => {
@@ -131,13 +139,23 @@ function ExploreInner() {
     const params = new URLSearchParams();
     if (category !== 'all') params.set('category', category);
     if (q.trim()) params.set('q', q.trim());
-    fetch('/api/places?' + params, { signal: controller.signal })
-      .then(async r => { if (!r.ok) throw new Error(); const data = await r.json(); if (!Array.isArray(data)) throw new Error(); return data; })
-      .then(data => setPlaces(data))
+    if (onlyIndoor) params.set('indoor', 'true');
+    const token = localStorage.getItem('hv_token');
+    if (personalized && token) params.set('personalized', 'true');
+    fetch('/api/places?' + params, { signal: controller.signal, headers: token && personalized ? { Authorization: `Bearer ${token}` } : {} })
+      .then(async r => {
+        if (r.status === 401 && personalized && token) {
+          setPersonalized(false);
+          setPreferenceNotice('Phiên đăng nhập đã hết hiệu lực. Đang hiển thị địa điểm công khai; đăng nhập lại để dùng sở thích đã lưu.');
+          return [];
+        }
+        if (!r.ok) throw new Error(); const data = await r.json(); if (!Array.isArray(data)) throw new Error(); return data;
+      })
+      .then(data => { if (!controller.signal.aborted) setPlaces(data); })
       .catch(() => { if (!controller.signal.aborted) setPlacesError('Chưa tải được địa điểm. Kiểm tra mạng rồi thử lại; lựa chọn tìm kiếm vẫn được giữ.'); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [category, q, retry]);
+  }, [category, q, retry, onlyIndoor, personalized]);
 
   const locateMe = () => {
     navigator.geolocation?.getCurrentPosition(
@@ -147,6 +165,7 @@ function ExploreInner() {
     );
   };
   const visiblePlaces = onlyOpen ? places.filter(place => ['open', 'closing_soon'].includes((place as any).opening_status?.status)) : places;
+  const weatherNeedsShelter = Boolean(weather && (weather.condition === 'rainy' || weather.temp >= 36 || weather.temp <= 20));
 
   return (
     <>
@@ -158,7 +177,7 @@ function ExploreInner() {
             Hôm nay muốn <em style={{ color: 'var(--coral)' }}>cảm nhận</em> gì?
           </h1>
         </div>
-        <button className="header-btn" aria-label="Map view" onClick={() => setMapExpanded(value => !value)}>
+        <button className="header-btn" aria-label="Mở hoặc đóng bản đồ" onClick={() => setMapExpanded(value => !value)}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
             <line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>
@@ -168,6 +187,9 @@ function ExploreInner() {
 
       {/* Mood filter */}
       <div style={{ padding: '14px 20px 0' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: '.82rem' }}><input type="checkbox" checked={personalized} onChange={event => setPersonalized(event.target.checked)} />Ưu tiên sở thích đã lưu</label>
+        {preferenceNotice && <p role="status" style={{ fontSize: '.8rem', lineHeight: 1.6, color: 'var(--navy-muted)', marginBottom: 12 }}>{preferenceNotice}</p>}
+        {onlyIndoor && <p role="status" style={{ fontSize: '.8rem', lineHeight: 1.6, color: 'var(--navy-muted)' }}>Đang lọc nơi được ghi nhận có không gian trong nhà. Hãy xác nhận giờ mở cửa và lối vào có che mưa với địa điểm trước khi đi.</p>}
         <p style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--navy-muted)', marginBottom: 10 }}>Tôi đang muốn...</p>
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none' }}>
           {MOODS.map(mood => (
@@ -212,16 +234,16 @@ function ExploreInner() {
         <div style={{ margin: '0 20px 12px', background: 'linear-gradient(135deg, rgba(255,127,107,0.06), rgba(255,154,92,0.04))', border: '1px solid rgba(255,127,107,0.12)', borderRadius: 'var(--radius-md)', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{ fontSize: '1.1rem' }}>✨</span>
           <p style={{ flex: 1, fontSize: '0.8125rem', color: 'var(--navy)', lineHeight: 1.4 }}>
-            {weather.condition_vi} {weather.temp}°C — {weather.condition_vi === 'Nắng đẹp' ? 'Thích hợp ghé Chùa Thiên Mụ lúc sáng sớm!' : 'Hôm nay lý tưởng để khám phá ẩm thực đường phố Huế!'}
+            {weather.condition_vi} {weather.temp}°C — {weatherNeedsShelter ? 'Cân nhắc nơi có không gian trong nhà để nghỉ và tránh thời tiết ngoài trời.' : 'Chọn nơi phù hợp với nhịp đi của bạn và kiểm tra giờ mở cửa trước khi tới.'}
           </p>
-          <button style={{ padding: '6px 12px', background: 'var(--coral)', color: 'white', border: 'none', borderRadius: 'var(--radius-full)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
-            Xem →
+          <button disabled={weatherNeedsShelter ? onlyIndoor : onlyOpen} onClick={() => weatherNeedsShelter ? setOnlyIndoor(true) : setOnlyOpen(true)} style={{ padding: '6px 12px', background: 'var(--coral)', color: 'white', border: 'none', borderRadius: 'var(--radius-full)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+            {(weatherNeedsShelter ? onlyIndoor : onlyOpen) ? 'Đang lọc' : weatherNeedsShelter ? 'Trong nhà →' : 'Đang mở →'}
           </button>
         </div>
       )}
 
       {/* Weather Strip */}
-      <WeatherWidget weather={weather} style={{ margin: '0 20px 16px' }} />
+      <WeatherWidget weather={weatherData} onRetry={refreshWeather} style={{ margin: '0 20px 16px' }} />
 
       {/* Filter chips */}
       <CategoryFilter 
@@ -231,7 +253,8 @@ function ExploreInner() {
         style={{ marginBottom: 16 }} 
       />
       <div style={{ padding: '0 20px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <button onClick={() => setOnlyOpen(value => !value)} className={`mood-chip${onlyOpen ? ' active' : ''}`}>🟢 Đang mở</button>
+        <button aria-pressed={onlyIndoor} onClick={() => setOnlyIndoor(value => !value)} className={`mood-chip${onlyIndoor ? ' active' : ''}`}>☔ Trong nhà</button>
+        <button aria-pressed={onlyOpen} onClick={() => setOnlyOpen(value => !value)} className={`mood-chip${onlyOpen ? ' active' : ''}`}>🟢 Đang mở</button>
         {onlyOpen && <span style={{ fontSize: '.75rem', color: 'var(--navy-muted)' }}>{visiblePlaces.length} nơi đang mở</span>}
       </div>
 
@@ -265,7 +288,10 @@ function ExploreInner() {
         ) : (
           <div className="places-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {visiblePlaces.map(place => (
-              <PlaceCard key={place.id} place={place} layout="grid" />
+              <div key={place.id}>
+                <PlaceCard place={place} layout="grid" />
+                {place.preference_reasons?.length ? <p style={{ padding: '6px 4px', fontSize: '.72rem', color: 'var(--navy-muted)' }}>{place.preference_reasons.join(' · ')}</p> : null}
+              </div>
             ))}
             {visiblePlaces.length === 0 && (
               <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '48px 20px', color: 'var(--navy-muted)' }}>
@@ -274,8 +300,10 @@ function ExploreInner() {
                   Huế còn nhiều góc nhỏ khác...
                 </h3>
                 <p style={{ fontSize: '0.875rem', color: 'var(--navy-muted)', lineHeight: 1.6, marginBottom: 16 }}>
-                  AI có thể gợi ý thêm không? Chỉ cần nói cảm giác bạn muốn ở trên kia.
+                  {onlyIndoor ? 'Chưa có nơi trong nhà phù hợp với các lựa chọn hiện tại. Thử đổi danh mục hoặc bỏ bộ lọc trong nhà; HueViVu chưa thể hứa nơi khác đủ che mưa.' : onlyOpen ? 'Chưa có nơi đang mở trong dữ liệu hiện có. Bạn có thể bỏ bộ lọc và gọi trực tiếp để hỏi giờ trước khi đi.' : 'Thử đổi danh mục hoặc từ khóa để tìm trong kho địa điểm hiện có.'}
                 </p>
+                {onlyIndoor && <button className="btn btn-primary" onClick={() => { setOnlyIndoor(false); setOnlyOpen(false); }}>Bỏ bộ lọc trong nhà</button>}
+                {!onlyIndoor && onlyOpen && <button className="btn btn-primary" onClick={() => setOnlyOpen(false)}>Xem cả nơi chưa rõ giờ mở</button>}
               </div>
             )}
           </div>

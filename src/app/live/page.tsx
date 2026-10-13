@@ -1,4 +1,5 @@
 'use client';
+import { useHueWeather } from '@/components/ui/useHueWeather';
 
 import { useEffect, useRef, useState } from 'react';
 import { Camera, ChevronLeft, MapPin, Mic, MicOff, Sparkles, Volume2, VolumeX } from 'lucide-react';
@@ -29,11 +30,11 @@ export default function HueViVuLivePage() {
   const [error, setError] = useState('');
   const [muted, setMuted] = useState(false);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [weather, setWeather] = useState<any>(null);
+  const { usableWeather: weather } = useHueWeather();
   const [nearby, setNearby] = useState<any[]>([]);
 
   useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
-  useEffect(() => { fetch('/api/weather').then(r => r.json()).then(data => setWeather(data._fallback ? null : data)).catch(() => {}); }, []);
+
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach(track => track.stop());
     window.speechSynthesis?.cancel();
@@ -141,7 +142,7 @@ export default function HueViVuLivePage() {
         <>
           <section className="relative z-10 px-4 pt-2">
             <div className="flex gap-2 overflow-x-auto pb-2">{MODES.map(item => <button key={item.key} onClick={() => setMode(item.key)} className={`shrink-0 px-3 py-2 rounded-full text-xs font-semibold border ${mode === item.key ? 'bg-white text-gray-950 border-white' : 'bg-black/35 border-white/20'}`}>{item.label}</button>)}</div>
-            <div className="mt-3 flex items-center gap-2 text-xs text-white/75"><MapPin size={14} className="text-amber-300" /><span>{location ? 'Đã dùng vị trí để tìm dữ liệu gần bạn' : 'Chưa có vị trí — vẫn có thể nhận diện bằng ảnh'}</span>{weather && <span className="ml-auto">{weather.condition_emoji} {weather.temp}°C</span>}</div>
+            <div className="mt-3 flex items-center gap-2 text-xs text-white/75"><MapPin size={14} className="text-amber-300" /><span>{location ? 'Đã dùng vị trí để tìm dữ liệu gần bạn' : 'Chưa có vị trí — vẫn có thể nhận diện bằng ảnh'}</span>{weather && <span className="ml-auto">Huế · {weather.condition_emoji} {weather.temp}°C</span>}</div>
           </section>
 
           <section className="relative z-10 min-h-[42vh] flex items-center justify-center pointer-events-none">

@@ -1,8 +1,8 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { useEffect, useMemo } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import { validRoutePoint, type TripRoute } from '@/lib/navigation-route';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -36,82 +36,78 @@ const USER_ICON = new L.DivIcon({
 function MapBounds({ coords }: { coords: [number, number][] }) {
   const map = useMap();
   useEffect(() => {
-    if (coords.length > 0) map.fitBounds(L.latLngBounds(coords), { padding: [60, 60] });
+    if (coords.length > 0) map.fitBounds(L.latLngBounds(coords), { padding: [40, 40], maxZoom: 16 });
   }, [coords, map]);
+  return null;
+}
+
+function MapResize() {
+  const map = useMap();
+  useEffect(() => {
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(map.getContainer());
+    return () => observer.disconnect();
+  }, [map]);
+  return null;
+}
+
+function MapFollower({ location, follow, onPan }: { location: { lat: number; lng: number } | null; follow: boolean; onPan?: () => void }) {
+  const map = useMapEvents({ dragstart: () => onPan?.() });
+  const lat = location?.lat, lng = location?.lng;
+  useEffect(() => { if (follow && lat !== undefined && lng !== undefined) map.setView([lat, lng], Math.max(17, map.getZoom())); }, [follow, lat, lng, map]);
   return null;
 }
 
 // Hue center fallback
 const HUE_CENTER: [number, number] = [16.4637, 107.5909];
 
-export default function CinematicMapInner({ activities, activeIndex, userLocation }: { activities: any[]; activeIndex?: number; userLocation?: { lat: number; lng: number } | null }) {
-  const [route, setRoute] = useState<[number, number][]>([]);
-
-  // Stable coords: computed once per activities identity — no jitter on re-render
-  const mapped = useMemo(() => (activities || []).map((act, i) => ({
-    ...act,
-    lat: (typeof act.lat === 'number' && act.lat > 15 && act.lat < 17) ? act.lat : HUE_CENTER[0] + (i * 0.0002 - 0.0001),
-    lng: (typeof act.lng === 'number' && act.lng > 100 && act.lng < 110) ? act.lng : HUE_CENTER[1] + (i * 0.0002 - 0.0001),
-  })), [activities]);
-
-  const pinCoords: [number, number][] = mapped.map(a => [a.lat, a.lng]);
-
-  useEffect(() => {
-    if (mapped.length < 2) return;
-    const coords = mapped.map(a => `${a.lng},${a.lat}`).join(';');
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 8000);
-    fetch(`https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson`, { signal: ctrl.signal })
-      .then(r => r.json())
-      .then(data => {
-        clearTimeout(t);
-        if (data.routes?.[0]) {
-          setRoute(data.routes[0].geometry.coordinates.map((c: number[]) => [c[1], c[0]] as [number, number]));
-        } else {
-          setRoute(mapped.map(a => [a.lat, a.lng]));
-        }
-      })
-      .catch(() => setRoute(mapped.map(a => [a.lat, a.lng])));
-    return () => { clearTimeout(t); ctrl.abort(); };
-  }, [mapped]);
+export default function CinematicMapInner({ activities, activeIndex, userLocation, route, onSelect, completedIndexes = [], follow = false, onPan }: {
+  activities: any[]; activeIndex?: number; userLocation?: { lat: number; lng: number; accuracy?: number } | null;
+  route?: TripRoute | null; onSelect?: (index: number) => void; completedIndexes?: number[]; follow?: boolean; onPan?: () => void;
+}) {
+  const mapped = useMemo(() => (activities || []).flatMap((activity, index) => {
+    const point = validRoutePoint(activity);
+    return point ? [{ ...activity, ...point, index }] : [];
+  }), [activities]);
+  const pinCoords = useMemo<[number, number][]>(() => mapped.map(activity => [activity.lat, activity.lng]), [mapped]);
+  const path = useMemo<[number, number][]>(() => route && route.provider !== 'google' ? route.points.map(point => [point.lat, point.lng]) : [], [route]);
 
   return (
     <div style={{ width: '100%', height: '100%' }}>
       <MapContainer center={HUE_CENTER} zoom={14} style={{ width: '100%', height: '100%', zIndex: 1 }} zoomControl={true}>
+        <MapResize />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a>'
         />
-        {route.length > 1 && (
+        {path.length > 1 && (
           <>
-            <Polyline positions={route} pathOptions={{ color: '#FF7F6B', weight: 8, opacity: 0.25 }} />
-            <Polyline positions={route} pathOptions={{ color: '#FF9A5C', weight: 3, opacity: 0.9, dashArray: '8,8' }} />
+            <Polyline positions={path} pathOptions={{ color: '#FFFFFF', weight: 10, opacity: 0.85 }} />
+            <Polyline positions={path} pathOptions={{ color: '#2563EB', weight: 6, opacity: 0.95 }} />
           </>
         )}
-        {pinCoords.length > 0 && <MapBounds coords={pinCoords} />}
-        {mapped.map((act, i) => (
-          <Marker key={i} position={[act.lat, act.lng]} icon={createMarker(TYPE_EMOJI[act.type] || '📍', i)}
-            zIndexOffset={activeIndex === i ? 1000 : 0}>
+        {(path.length > 0 || pinCoords.length > 0) && <MapBounds coords={path.length ? path : pinCoords} />}
+        <MapFollower location={userLocation || null} follow={follow === true} onPan={onPan} />
+        {mapped.map(act => (
+          <Marker key={act.index} position={[act.lat, act.lng]} icon={createMarker(completedIndexes.includes(act.index) ? '✓' : TYPE_EMOJI[act.type] || '📍', act.itineraryIndex ?? act.index)}
+            zIndexOffset={activeIndex === act.index ? 1000 : 0}>
             <Popup>
               <div style={{ padding: '6px 2px', minWidth: 160 }}>
                 <p style={{ margin: 0, fontWeight: 700, color: '#1A1D3B', fontSize: 13 }}>{act.name}</p>
                 <p style={{ margin: '3px 0 0', fontSize: 11, color: '#666' }}>{act.time} · {act.duration}</p>
                 {act.cost && <p style={{ margin: '3px 0 0', fontSize: 11, color: '#FF7F6B', fontWeight: 600 }}>{act.cost}</p>}
-                <a
-                  href={`https://www.google.com/maps/dir/?api=1&destination=${act.lat},${act.lng}&travelmode=walking`}
-                  target="_blank" rel="noreferrer"
-                  style={{ display: 'inline-block', marginTop: 6, fontSize: 11, color: 'white', background: '#FF7F6B', padding: '4px 10px', borderRadius: 20, fontWeight: 600, textDecoration: 'none' }}
-                >
-                  🗺️ Chỉ đường
-                </a>
+                {onSelect && <button onClick={() => onSelect(act.index)} style={{ display: 'inline-block', minHeight: 44, marginTop: 6, padding: '7px 10px', border: 'none', borderRadius: 12, background: '#FF7F6B', color: 'white', fontWeight: 700 }}>Xem đường trong HueViVu</button>}
               </div>
             </Popup>
           </Marker>
         ))}
         {userLocation && (
+          <>
+          {Number.isFinite(userLocation.accuracy) && <Circle center={[userLocation.lat, userLocation.lng]} radius={userLocation.accuracy!} pathOptions={{ color: '#2563EB', weight: 1, opacity: 0.4, fillOpacity: 0.1 }} />}
           <Marker position={[userLocation.lat, userLocation.lng]} icon={USER_ICON} zIndexOffset={2000}>
             <Popup><p style={{ margin: 0, fontWeight: 700, fontSize: 12 }}>📍 Vị trí của bạn</p></Popup>
           </Marker>
+          </>
         )}
       </MapContainer>
     </div>

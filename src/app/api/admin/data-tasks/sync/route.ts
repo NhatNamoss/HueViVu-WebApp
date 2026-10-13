@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
   const insert = db.prepare(`INSERT INTO data_tasks (id,place_id,task_type,title,description,priority,status,created_by) VALUES (?,?,?,?,?,?,?,?)`);
   for (const place of places) {
     const gaps: string[] = [];
+    if (place.data_trust?.gaps?.length) gaps.push(...place.data_trust.gaps.map((gap: string) => 'thiếu ' + gap));
     if (place.completeness_score < 80) gaps.push(`độ đầy đủ ${place.completeness_score}%`);
     if (place.needs_reverification) gaps.push('đến hạn tái xác minh');
     if (place.quality_issues?.length) gaps.push(...place.quality_issues);

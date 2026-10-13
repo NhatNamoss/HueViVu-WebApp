@@ -1,8 +1,10 @@
+import { applyVerificationPolicy } from '@/lib/place-trust';
 import { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
 import { parsePlaceRow, preparePlacePayload } from '@/lib/place-data';
 import { normalizePlaceCategory } from '@/lib/place-taxonomy';
-import { requireRoles } from '@/lib/auth';
+import { requireRoles, getAuthUserId } from '@/lib/auth';
+import { readPreferences, rankPlaces } from '@/lib/travel-preferences';
 import { writeAudit } from '@/lib/audit';
 import { findPlaceDuplicates } from '@/lib/place-duplicates';
 
@@ -13,6 +15,8 @@ export async function GET(req: NextRequest) {
   const category = searchParams.get('category');
   const q = searchParams.get('q');
   const scope = searchParams.get('scope');
+  const indoor = searchParams.get('indoor');
+  if (indoor !== null && !['true', 'false'].includes(indoor)) return Response.json({ error: 'Lựa chọn không gian chưa hợp lệ.' }, { status: 400 });
 
   const conditions: string[] = [];
   const params: any[] = [];
@@ -34,12 +38,18 @@ export async function GET(req: NextRequest) {
     conditions.push('(name LIKE ? OR description LIKE ?)');
     params.push(`%${q}%`, `%${q}%`);
   }
+  if (indoor === 'true') conditions.push('indoor = 1');
 
   const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
   const places = db.prepare(`SELECT * FROM places${where} ORDER BY popularity DESC, rating DESC`).all(...params) as any[];
 
   places.forEach(parsePlaceRow);
-
+  if (scope !== 'admin' && searchParams.get('personalized') === 'true') {
+    const userId = getAuthUserId(req);
+    if (!userId) return Response.json({ error: 'Cần đăng nhập để dùng sở thích.' }, { status: 401 });
+    const user = db.prepare('SELECT preferences FROM users WHERE id = ?').get(userId) as { preferences: string };
+    return Response.json(rankPlaces(places, readPreferences(user.preferences)), { headers: { 'Cache-Control': 'private, no-store', Vary: 'Authorization' } });
+  }
   return Response.json(places);
 }
 
@@ -60,6 +70,7 @@ export async function POST(req: NextRequest) {
     if (p.verification_status === 'verified' && !['admin', 'reviewer'].includes(access.role)) {
       return Response.json({ error: 'Collector không thể tự xác minh địa điểm' }, { status: 403 });
     }
+    try { applyVerificationPolicy(p); } catch (error) { return Response.json({ error: (error as Error).message }, { status: 400 }); }
     if (p.publication_status === 'published' && access.role !== 'admin') p.publication_status = 'draft';
 
     const stmt = db.prepare(`

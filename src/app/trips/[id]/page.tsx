@@ -1,10 +1,19 @@
 'use client';
+import { useHueWeather } from '@/components/ui/useHueWeather';
+import WeatherWidget from '@/components/ui/WeatherWidget';
+import { useWeatherTripImpact } from '@/components/trip/useWeatherTripImpact';
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import CinematicMap from '@/components/CinematicMap';
+import TripNavigation from '@/components/trip/TripNavigation';
+import { itineraryFingerprint, type RoutePoint, type TripRoute } from '@/lib/navigation-route';
 import { trackEvent } from '@/lib/analytics';
 import FeasibilityAssistant from '@/components/trip/FeasibilityAssistant';
+import { cacheTrip, readCachedTrip, removeCachedTrip } from '@/lib/offline-trip-cache';
+import { getDayProgress, activityKeys } from '@/lib/trip-state';
+import { getHueClock, tripDayIndex } from '@/lib/travel-clock';
+import TripProgressPanel from '@/components/trip/TripProgressPanel';
+import type { TripState, TripStatePatch } from '@/lib/trip-state';
 
 type Activity = {
   time: string; name: string; type: string;
@@ -17,7 +26,7 @@ type Trip = {
   id: string; title: string; summary: string; duration: number;
   companion: string; total_cost_estimate: string; ai_insight: string;
   highlights: string[]; itinerary: { days: Day[] }; is_shared: number;
-  user_id: string; status: string;
+  user_id: string; status: string; start_date?: string;
 };
 type Weather = {
   emoji: string; temp: number; vi: string;
@@ -44,7 +53,7 @@ const PACKING = [
   'Áo khoác mỏng (buổi tối Huế se lạnh)',
 ];
 const TIMES = ['07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00'];
-type ChatProposal = { instruction: string; itinerary: any; summary: string[] };
+type ChatProposal = { instruction: string; itinerary: any; summary: string[]; expectedItinerary: string; expectedStateUpdatedAt: string | null };
 type ChatMsg = { role: 'user' | 'assistant'; content: string; proposal?: ChatProposal; applied?: boolean };
 
 // Haversine distance (km)
@@ -100,8 +109,8 @@ function WeatherBanner({ weather, onDismiss }: { weather: Weather; onDismiss: ()
   const border = weather.advisory_type === 'warn' ? 'rgba(239,68,68,0.22)'
     : weather.advisory_type === 'caution' ? 'rgba(245,158,11,0.22)' : 'rgba(34,197,94,0.22)';
   return (
-    <div style={{ margin: '0 20px 12px', padding: '12px 14px', background: bg, borderRadius: 'var(--radius-md)', border: '1px solid ' + border, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      <span style={{ fontSize: 22, flexShrink: 0 }}>{weather.emoji}</span>
+    <div className="trip-weather-banner" style={{ margin: '0 20px 8px', padding: '8px 12px', background: bg, borderRadius: 'var(--radius-md)', border: '1px solid ' + border, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      <span style={{ fontSize: 18, flexShrink: 0 }}>{weather.emoji}</span>
       <div style={{ flex: 1 }}>
         <p style={{ fontSize: '0.8125rem', fontWeight: 700, color: 'var(--navy)', margin: '0 0 2px' }}>{weather.temp}°C · {weather.vi}</p>
         <p style={{ fontSize: '0.775rem', color: 'var(--navy-muted)', margin: 0, lineHeight: 1.5 }}>{weather.advisory}</p>
@@ -116,10 +125,29 @@ export default function TripDetailPage() {
   const router = useRouter();
   const [trip, setTrip] = useState<Trip | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [offlineSavedAt, setOfflineSavedAt] = useState<number | null>(null);
   const [activeDay, setActiveDay] = useState(0);
   const [activeActivity, setActiveActivity] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<'timeline' | 'map'>('timeline');
   const [chatOpen, setChatOpen] = useState(false);
+  const chatToolbarRef = useRef<HTMLDivElement>(null);
+  const tripViewControlsRef = useRef<HTMLDivElement>(null);
+  const [chatEntryVisible, setChatEntryVisible] = useState(true);
+  useEffect(() => {
+    if (loading || !trip?.id) return;
+    if (!('IntersectionObserver' in window)) { setChatEntryVisible(false); return; }
+    const targets = [chatToolbarRef.current, tripViewControlsRef.current].filter((target): target is HTMLDivElement => !!target);
+    const visible = new Map<Element, boolean>(targets.map(target => [target, false]));
+    let cancelled = false;
+    const observer = new IntersectionObserver(entries => {
+      if (cancelled) return;
+      entries.forEach(entry => visible.set(entry.target, entry.isIntersecting));
+      setChatEntryVisible([...visible.values()].some(Boolean));
+    });
+    targets.forEach(target => observer.observe(target));
+    return () => { cancelled = true; observer.disconnect(); };
+  }, [loading, trip?.id]);
   const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -141,7 +169,8 @@ export default function TripDetailPage() {
   const [toolsOpen, setToolsOpen] = useState(false);
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [weather, setWeather] = useState<Weather | null>(null);
+  const { weather: weatherData, usableWeather, refreshWeather, clock: weatherClock } = useHueWeather();
+  const weather: Weather | null = usableWeather ? { emoji: usableWeather.condition_emoji, temp: usableWeather.temp, vi: usableWeather.condition_vi, advisory: usableWeather.advisory, advisory_type: usableWeather.advisory_type, forecast: usableWeather.forecast } : null;
   const [weatherDismissed, setWeatherDismissed] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editDayIdx, setEditDayIdx] = useState(0);
@@ -150,9 +179,20 @@ export default function TripDetailPage() {
   const [saving, setSaving] = useState(false);
   // Realtime tracking
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [measuredRoute, setMeasuredRoute] = useState<TripRoute | null>(null);
+  const locationNotice = '';
+  const [tripState, setTripState] = useState<TripState | null>(null);
+  useEffect(() => { setMeasuredRoute(null); }, [params.id, activeDay, trip?.itinerary, tripState?.updatedAt]);
+  const [progressStatus, setProgressStatus] = useState<'loading' | 'idle' | 'saving' | 'saved' | 'error'>('loading');
+  const [progressError, setProgressError] = useState('');
+  const [progressConflict, setProgressConflict] = useState(false);
+  const [progressNeedsLogin, setProgressNeedsLogin] = useState(false);
+  const progressSavingRef = useRef(false);
+  const progressEpochRef = useRef(0);
+  const pendingProgressRef = useRef<(TripStatePatch & { startTodayIfMissing?: boolean }) | null>(null);
   const [tourToast, setTourToast] = useState<string | null>(null);
   const lastNotifiedRef = useRef<string>('');
-  const weatherIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const notifiedWeatherRef = useRef('');
   // place search
   const [placeSearchOpen, setPlaceSearchOpen] = useState(false);
   const [placeQuery, setPlaceQuery] = useState('');
@@ -166,24 +206,106 @@ export default function TripDetailPage() {
   const [placeOk, setPlaceOk] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const token = typeof window !== 'undefined' ? localStorage.getItem('hv_token') : null;
+  const weatherImpact = useWeatherTripImpact(trip, tripState, activeDay, usableWeather, token, progressStatus === 'loading' || progressStatus === 'saving' || progressStatus === 'error', weatherClock);
+
+  const loadTripState = useCallback(async () => {
+    const epoch = ++progressEpochRef.current;
+    setProgressStatus('loading'); setProgressError(''); setProgressConflict(false); setProgressNeedsLogin(false);
+    pendingProgressRef.current = null;
+    try {
+      const response = await fetch('/api/trips/' + params.id + '/state', { headers: token ? { Authorization: 'Bearer ' + token } : {}, signal: AbortSignal.timeout(8000) });
+      const data = await response.json().catch(() => ({ error: 'Máy chủ chưa trả được tiến độ. Hãy thử lại.' }));
+      if (epoch !== progressEpochRef.current) return;
+      if (!response.ok || !data.state) {
+        setProgressNeedsLogin(response.status === 401);
+        throw new Error(response.status === 401 ? 'Phiên sử dụng đã hết hạn. Hãy đăng nhập lại để lưu tiến độ.' : data.error || 'Chưa tải được tiến độ.');
+      }
+      setTripState(data.state); setActiveDay(data.state.dayIndex); setProgressStatus('idle');
+    } catch (error) {
+      if (epoch !== progressEpochRef.current) return;
+      setProgressStatus('error'); setProgressError(error instanceof Error && error.name === 'Error' ? error.message : 'Chưa tải được tiến độ. Kiểm tra mạng rồi thử lại.');
+    }
+  }, [params.id, token]);
+
+  useEffect(() => {
+    loadTripState();
+    return () => { progressEpochRef.current += 1; };
+  }, [loadTripState]);
+
+  const saveTripProgress = async (patch: TripStatePatch & { startTodayIfMissing?: boolean }) => {
+    if (!tripState || !token || progressSavingRef.current) return;
+    const epoch = progressEpochRef.current;
+    progressSavingRef.current = true;
+    pendingProgressRef.current = { dayIndex: activeDay, ...patch };
+    setProgressStatus('saving'); setProgressError(''); setProgressConflict(false); setProgressNeedsLogin(false);
+    try {
+      const response = await fetch('/api/trips/' + params.id + '/state', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+        body: JSON.stringify({ ...pendingProgressRef.current, expectedUpdatedAt: tripState.updatedAt, expectedActivityKeys: activityKeys(trip?.itinerary.days[patch.dayIndex ?? activeDay]?.activities || []) }), signal: AbortSignal.timeout(8000),
+      });
+      const data = await response.json().catch(() => ({ error: 'Máy chủ chưa trả được tiến độ. Hãy thử lại.' }));
+      if (epoch !== progressEpochRef.current) return;
+      if (!response.ok || !data.state) {
+        setProgressConflict(response.status === 409); setProgressNeedsLogin(response.status === 401);
+        throw new Error(response.status === 401 ? 'Phiên sử dụng đã hết hạn. Hãy đăng nhập lại để lưu tiến độ.' : data.error || 'Chưa lưu được tiến độ.');
+      }
+      setTripState(data.state); setActiveDay(data.state.dayIndex); pendingProgressRef.current = null; setProgressStatus('saved');
+      if (data.startDate) setTrip(previous => previous ? { ...previous, start_date: data.startDate } : previous);
+    } catch (error) {
+      if (epoch !== progressEpochRef.current) return;
+      setProgressStatus('error'); setProgressError(error instanceof Error && error.name === 'Error' ? error.message : 'Chưa lưu được tiến độ. Kiểm tra mạng rồi thử lại; lựa chọn vẫn được giữ.');
+    } finally { progressSavingRef.current = false; }
+  };
+
+  const selectTripDay = (dayIndex: number) => {
+    if (progressSavingRef.current) return;
+    setActiveDay(dayIndex); setActiveActivity(null);
+    if (tripState) saveTripProgress({ dayIndex });
+  };
+
+  const toggleActivityDone = (index: number) => {
+    if (!tripState || !trip) return;
+    const activities = trip.itinerary.days[activeDay]?.activities || [];
+    const progress = getDayProgress(tripState, activeDay, activities);
+    const completed = progress.completedActivityIndexes.includes(index)
+      ? progress.completedActivityIndexes.filter(value => value !== index) : [...progress.completedActivityIndexes, index];
+    const next = activities.findIndex((_, i) => !completed.includes(i));
+    saveTripProgress({ dayIndex: activeDay, completedActivityIndexes: completed, currentActivityIndex: next < 0 ? null : next,
+    });
+  };
 
   useEffect(() => {
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = 'Bearer ' + token;
     fetch('/api/trips/' + params.id, { headers })
-      .then(r => r.json()).then(data => { setTrip(data); setLoading(false); })
-      .catch(() => setLoading(false));
-    fetch('/api/weather')
-      .then(r => r.json())
-      .then(d => {
-        if (d._fallback || !Number.isFinite(d.temp)) { setWeather(null); return; }
-        setWeather({
-          emoji: d.condition_emoji || '🌤️', temp: d.temp,
-          vi: d.condition_vi || '', advisory: d.advisory || '',
-          advisory_type: d.advisory_type || 'good', forecast: d.forecast,
-        });
-      }).catch(() => {});
+      .then(async r => {
+        if (!r.ok) {
+          if ([401, 403, 404].includes(r.status)) {
+            removeCachedTrip(String(params.id));
+            setLoadError(r.status === 401 ? 'Phiên sử dụng đã hết hạn. Hãy đăng nhập lại.' : 'Lịch trình không còn tồn tại hoặc bạn không có quyền xem.');
+            return null;
+          }
+          throw new Error('Không tải được lịch trình');
+        }
+        return r.json();
+      }).then(data => {
+        setTrip(data); setLoading(false);
+      })
+      .catch(() => {
+        const cached = readCachedTrip<Trip>(String(params.id));
+        if (cached?.data) {
+          window.location.replace('/offline.html?trip=' + encodeURIComponent(String(params.id)));
+          return;
+        }
+        setLoadError('Chưa tải được lịch trình và chưa có bản lưu trên máy. Hãy kết nối mạng rồi thử lại.');
+        setLoading(false);
+      });
+
   }, [params.id, token]);
+
+  useEffect(() => {
+    setOfflineSavedAt(trip?.id && cacheTrip(String(params.id), trip) ? Date.now() : null);
+  }, [trip, params.id, token]);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [chatMessages]);
 
@@ -193,26 +315,17 @@ export default function TripDetailPage() {
       .then(response => response.ok ? response.json() : null).then(setFeasibility).catch(() => {});
   }, [trip?.itinerary, params.id, token]);
 
-  // ── Realtime GPS tracking ──
-  useEffect(() => {
-    if (!navigator.geolocation) return;
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 5000 }
-    );
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
-
   // ── Tour notifications: schedule + geofence ──
   useEffect(() => {
-    if (!trip) return;
-    const activities = trip.itinerary?.days?.[activeDay]?.activities || [];
+    if (!trip || !tripState?.startedAt || trip.status !== 'active' || tripDayIndex(trip.start_date) !== activeDay) return;
+    const all = trip.itinerary?.days?.[activeDay]?.activities || [];
+    const completed = getDayProgress(tripState, activeDay, all).completedActivityIndexes;
+    const activities = all.filter((_, i) => !completed.includes(i));
     if (activities.length === 0) return;
 
     const checkTour = () => {
       const now = new Date();
-      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const nowMin = getHueClock(now).minutes;
 
       for (const act of activities) {
         const [h, m] = (act.time || '').split(':').map(Number);
@@ -254,36 +367,20 @@ export default function TripDetailPage() {
     checkTour();
     const interval = setInterval(checkTour, 30_000); // Check mỗi 30s
     return () => clearInterval(interval);
-  }, [trip, activeDay, userLocation]);
+  }, [trip, activeDay, userLocation, tripState]);
 
-  // ── Weather polling mỗi 30 phút + notification khi thay đổi ──
   useEffect(() => {
-    const prevWeatherRef = { key: '' };
-    const pollWeather = () => {
-      fetch('/api/weather').then(r => r.json()).then(d => {
-        if (d._fallback || !Number.isFinite(d.temp)) { setWeather(null); return; }
-        const newWeather: Weather = {
-          emoji: d.condition_emoji || '🌤️', temp: d.temp,
-          vi: d.condition_vi || '', advisory: d.advisory || '',
-          advisory_type: d.advisory_type || 'good', forecast: d.forecast,
-        };
-        const newKey = `${d.condition}|${d.temp}`;
-        if (prevWeatherRef.key && prevWeatherRef.key !== newKey) {
-          // Thời tiết thay đổi → toast + push
-          setWeatherDismissed(false);
-          setTourToast(`🌤️ Thời tiết thay đổi: ${d.temp}°C — ${d.condition_vi}`);
-          if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification('HueViVu — Thời tiết', { body: d.advisory || `${d.temp}°C — ${d.condition_vi}`, icon: '/icon-192x192.png' });
-          }
-        }
-        prevWeatherRef.key = newKey;
-        setWeather(newWeather);
-      }).catch(() => {});
-    };
-
-    weatherIntervalRef.current = setInterval(pollWeather, 30 * 60_000); // 30 phút
-    return () => { if (weatherIntervalRef.current) clearInterval(weatherIntervalRef.current); };
-  }, []);
+    if (!usableWeather) { notifiedWeatherRef.current = ''; return; }
+    const key = usableWeather.condition + '|' + usableWeather.temp;
+    if (notifiedWeatherRef.current && notifiedWeatherRef.current !== key) {
+      setWeatherDismissed(false);
+      setTourToast('Thời tiết thành phố Huế thay đổi: ' + usableWeather.temp + '°C — ' + usableWeather.condition_vi);
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('HueViVu — Thời tiết Huế', { body: usableWeather.advisory, icon: '/icon-192x192.png' });
+      }
+    }
+    notifiedWeatherRef.current = key;
+  }, [usableWeather]);
 
   const persistRaw = useCallback(async (newTrip: Trip) => {
     setSaving(true);
@@ -431,10 +528,10 @@ export default function TripDetailPage() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
-        body: JSON.stringify({ message: msg, tripId: params.id, history: newMsgs.slice(-10) }),
+        body: JSON.stringify({ message: msg, tripId: params.id, dayIndex: activeDay, history: newMsgs.slice(-10) }),
       });
       const data = await res.json();
-      setChatMessages(prev => [...prev, { role: 'assistant', content: data.reply || 'Xin lỗi, thử lại nhé!', proposal: data.proposal || undefined }]);
+      setChatMessages(prev => [...prev, { role: 'assistant', content: res.ok ? (data.reply || 'Chưa có câu trả lời. Hãy thử lại.') : (data.error || 'Chưa gửi được câu hỏi. Hãy thử lại.'), proposal: res.ok ? data.proposal || undefined : undefined }]);
     } catch {
       setChatMessages(prev => [...prev, { role: 'assistant', content: 'Đang gặp sự cố kết nối. Thử lại sau nhé!' }]);
     } finally { setChatLoading(false); }
@@ -447,7 +544,7 @@ export default function TripDetailPage() {
       const response = await fetch('/api/trips/' + params.id + '/customize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
-        body: JSON.stringify({ instruction: proposal.instruction, proposal: proposal.itinerary }),
+        body: JSON.stringify({ instruction: proposal.instruction, proposal: proposal.itinerary, expectedItinerary: proposal.expectedItinerary, expectedStateUpdatedAt: proposal.expectedStateUpdatedAt }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Không thể áp dụng thay đổi');
@@ -462,6 +559,7 @@ export default function TripDetailPage() {
         if (data.feasibility) setFeasibility(data.feasibility);
         setChatMessages(prev => prev.map((item, index) => index === messageIndex ? { ...item, applied: true } : item));
         setTourToast('✓ Đã áp dụng thay đổi từ trợ lý AI');
+        loadTripState();
       }
     } catch (error: any) {
       setChatMessages(prev => [...prev, { role: 'assistant', content: error.message || 'Không thể áp dụng thay đổi.' }]);
@@ -475,25 +573,49 @@ export default function TripDetailPage() {
       const res = await fetch('/api/trips/' + params.id + '/customize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
-        body: JSON.stringify({ instruction: customizeText }),
+        body: JSON.stringify({ instruction: customizeText, preview: true }),
       });
       const data = await res.json();
-      if (data.error) { alert('Lỗi: ' + data.error); return; }
-      if (data.trip) {
-        setTrip(prev => prev ? {
-          ...prev, ...data.trip,
-          itinerary: data.trip.days ? { days: data.trip.days } : prev.itinerary,
-          highlights: data.trip.highlights || prev.highlights,
-          ai_insight: data.trip.ai_insight || prev.ai_insight,
-          total_cost_estimate: data.trip.total_cost_estimate || prev.total_cost_estimate,
-        } : null);
-        setCustomizeOpen(false); setCustomizeText(''); setActiveDay(0);
-      }
+      if (!res.ok) throw new Error(data.error || 'Không thể tạo phương án.');
+      setChatMessages(previous => [...previous, { role: 'assistant', content: 'Xem phương án trước khi xác nhận.', proposal: { instruction: customizeText, itinerary: data.proposal, summary: ['Phương án điều chỉnh theo yêu cầu của bạn.'], expectedItinerary: data.expectedItinerary, expectedStateUpdatedAt: data.expectedStateUpdatedAt } }]);
+      setCustomizeOpen(false); setChatOpen(true);
     } catch { alert('Đang gặp sự cố kết nối. Thử lại sau nhé!'); }
     finally { setCustomizing(false); }
   };
 
   const [adaptPreview, setAdaptPreview] = useState<any>(null);
+  const adaptPreviewRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (adaptPreview && adaptOpen) {
+      adaptPreviewRef.current?.scrollIntoView({ block: 'start' });
+      adaptPreviewRef.current?.focus({ preventScroll: true });
+    }
+  }, [adaptPreview, adaptOpen]);
+  const [autoReplanLoading, setAutoReplanLoading] = useState(false);
+  const replanEpochRef = useRef(0);
+  useEffect(() => {
+    replanEpochRef.current += 1;
+    setAdaptPreview(null); setAutoReplanLoading(false);
+  }, [params.id, activeDay, trip?.itinerary, tripState?.updatedAt]);
+
+  const checkAutomaticReplan = async (weatherOnly = false) => {
+    if (!trip || autoReplanLoading) return;
+    const epoch = ++replanEpochRef.current;
+    setAutoReplanLoading(true); setAdaptError('');
+    try {
+      const response = await fetch('/api/trips/' + params.id + '/replan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+        body: JSON.stringify({ dayIndex: activeDay, activityIndex: activeActivity, lat: userLocation?.lat, lng: userLocation?.lng, delayMinutes, ...(measuredRoute?.provider === 'google' && measuredRoute.itinerarySnapshot === itineraryFingerprint(trip.itinerary) && Date.now() - Date.parse(measuredRoute.computedAt) < 120000 ? { routeTargetIndex: measuredRoute.destinationIndex } : {}), ...(weatherOnly ? { trigger: 'weather' } : {}) }), signal: AbortSignal.timeout(12000),
+      });
+      const data = await response.json().catch(() => ({ error: 'Máy chủ chưa trả được phương án. Hãy thử lại.' }));
+      if (epoch !== replanEpochRef.current) return;
+      if (!response.ok || !data.decision) throw new Error(data.error || 'Chưa kiểm tra được lịch. Hãy thử lại.');
+      if (data.changed === false) { setAdaptPreview(null); setAdaptError(data.message || data.decision?.reason || 'Lịch hiện tại chưa cần thay đổi.'); return; }
+      setAdaptPreview({ ...data, before: JSON.parse(data.expectedItinerary).days[data.decision.dayIndex], dayIndex: data.decision.dayIndex, input: data.input });
+    } catch (error: any) { if (epoch === replanEpochRef.current) setAdaptError(error instanceof Error && error.name === 'Error' ? error.message : 'Chưa chuẩn bị được phương án. Kiểm tra mạng rồi thử lại; lịch hiện tại vẫn được giữ.'); }
+    finally { if (epoch === replanEpochRef.current) setAutoReplanLoading(false); }
+  };
 
   const applyAdaptation = async (scenario: 'late' | 'rain' | 'hungry' | 'tired' | 'closed', confirmed = false) => {
     if (!trip || adapting) return;
@@ -502,15 +624,15 @@ export default function TripDetailPage() {
     }
     setAdapting(true); setAdaptError('');
     const now = new Date();
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const currentTime = getHueClock(now).time;
     try {
       const response = await fetch(`/api/trips/${params.id}/adapt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify(confirmed && adaptPreview ? { ...adaptPreview.input, preview: false, expectedItinerary: adaptPreview.expectedItinerary } : { scenario, dayIndex: activeDay, activityIndex: activeActivity, delayMinutes, currentTime, lat: userLocation?.lat, lng: userLocation?.lng, preview: true }),
+        body: JSON.stringify(confirmed && adaptPreview ? { ...adaptPreview.input, preview: false, expectedItinerary: adaptPreview.expectedItinerary, expectedStateUpdatedAt: adaptPreview.expectedStateUpdatedAt } : { scenario, dayIndex: activeDay, activityIndex: activeActivity, delayMinutes, currentTime, lat: userLocation?.lat, lng: userLocation?.lng, preview: true }),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Không thể điều chỉnh lịch trình');
+      const data = await response.json().catch(() => ({ error: 'Máy chủ chưa trả được phương án. Hãy thử lại.' }));
+      if (!response.ok || !data.itinerary) throw new Error(data.error || 'Chưa chuẩn bị được phương án. Hãy thử lại.');
       if (data.changed === false) { setAdaptPreview(null); setAdaptError(data.message); return; }
       if (!confirmed) {
         setAdaptPreview({ ...data, before: trip.itinerary.days[activeDay], dayIndex: activeDay, input: { scenario, dayIndex: activeDay, activityIndex: activeActivity, delayMinutes, currentTime, lat: userLocation?.lat, lng: userLocation?.lng } });
@@ -518,9 +640,10 @@ export default function TripDetailPage() {
       }
       setAdaptPreview(null);
       setTrip(prev => prev ? { ...prev, itinerary: data.itinerary, ai_insight: `⚡ ${data.changes.join('. ')}` } : null);
+      loadTripState();
       setTourToast(`⚡ ${data.changes.join(' · ')}`); setAdaptOpen(false); setActiveActivity(null);
       trackEvent('trip_adapted', { trip_id: String(params.id), metadata: { scenario, day: activeDay + 1, changes: data.changes } });
-    } catch (error: any) { setAdaptError(error.message); }
+    } catch (error: any) { setAdaptError(error instanceof Error && error.name === 'Error' ? error.message : 'Chưa chuẩn bị được phương án. Kiểm tra mạng rồi thử lại; lịch hiện tại vẫn được giữ.'); }
     finally { setAdapting(false); }
   };
 
@@ -576,11 +699,6 @@ export default function TripDetailPage() {
     setCopied(true); setTimeout(() => setCopied(false), 2000);
   };
 
-  const mapsUrl = (act: Activity) =>
-    (act.lat && act.lng)
-      ? 'https://www.google.com/maps/dir/?api=1&destination=' + act.lat + ',' + act.lng + '&travelmode=walking'
-      : 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(act.name + ' Hue Vietnam');
-
   if (loading) return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', gap: 16, padding: '80px 20px 20px' }}>
       {[160, 80, 80, 80].map((h, i) => (
@@ -592,19 +710,40 @@ export default function TripDetailPage() {
   if (!trip || (trip as any).error) return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
       <span style={{ fontSize: 48 }}>🗺️</span>
-      <p style={{ color: 'var(--navy-muted)', fontWeight: 600 }}>Không tìm thấy lịch trình</p>
+      <p style={{ color: 'var(--navy-muted)', fontWeight: 600, padding: '0 20px', textAlign: 'center' }}>{loadError || 'Không tìm thấy lịch trình'}</p>
+      <button onClick={() => window.location.reload()} className="btn btn-primary">Thử tải lại</button>
       <Link href="/trips" style={{ color: 'var(--coral)', fontWeight: 700 }}>← Quay lại</Link>
     </div>
   );
 
   const currentDay = trip.itinerary?.days?.[activeDay];
   const allActivities = currentDay?.activities || [];
+  const progress = tripState ? getDayProgress(tripState, activeDay, allActivities) : { completedActivityIndexes: [], currentActivityIndex: null };
+  const todayIndex = tripDayIndex(trip.start_date);
+  const canStart = trip.status === 'active' && todayIndex !== null && todayIndex >= 0 && todayIndex < trip.itinerary.days.length;
+  const canTrack = canStart && activeDay <= (todayIndex ?? -1) && Boolean(tripState?.startedAt) && !['loading', 'saving', 'error'].includes(progressStatus);
+
+
+  const progressPanel = (!trip.is_shared || tripState) ? <TripProgressPanel
+        dayIndex={activeDay} completed={progress.completedActivityIndexes.length} total={allActivities.length}
+        state={tripState} status={progressStatus} error={progressError} conflict={progressConflict} needsLogin={progressNeedsLogin}
+        pendingDescription={pendingProgressRef.current?.startTodayIfMissing ? 'bắt đầu chuyến đi hôm nay' : pendingProgressRef.current?.fatigue ? ({ fresh: 'còn khỏe', okay: 'vừa sức', tired: 'đang mệt' } as Record<string, string>)[pendingProgressRef.current.fatigue] : pendingProgressRef.current?.completedActivityIndexes ? `đã đi ${pendingProgressRef.current.completedActivityIndexes.length} điểm ngày ${activeDay + 1}` : pendingProgressRef.current?.dayIndex !== undefined ? `xem ngày ${pendingProgressRef.current.dayIndex + 1}` : undefined}
+        canStart={canStart} startDate={trip.start_date}
+        onStart={() => saveTripProgress({ startedAt: new Date().toISOString() })}
+        onStartToday={() => saveTripProgress({ dayIndex: 0, startTodayIfMissing: true })}
+        onFatigue={fatigue => saveTripProgress({ fatigue })}
+        onRetry={() => progressConflict ? window.location.reload() : !pendingProgressRef.current ? loadTripState() : saveTripProgress(pendingProgressRef.current)}
+        onCancel={() => { pendingProgressRef.current = null; if (tripState) setActiveDay(tripState.dayIndex); setProgressError(''); setProgressStatus('idle'); }}
+        onRest={() => { setAdaptOpen(true); checkAutomaticReplan(); }}
+        hasNextDay={activeDay < trip.itinerary.days.length - 1}
+        onNextDay={() => selectTripDay(activeDay + 1)}
+      /> : null;
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--soft-white)', paddingBottom: 100 }}>
+    <div className="trip-page-shell" style={{ minHeight: '100vh', background: 'var(--soft-white)', paddingBottom: 100 }}>
 
       {/* Sticky header */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,252,248,0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(26,29,59,0.06)', padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,252,248,0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(26,29,59,0.06)', padding: '10px 20px', display: 'flex', alignItems: 'center', gap: 10 }}>
         <button onClick={() => router.back()} style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: 'rgba(26,29,59,0.06)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--navy)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
         </button>
@@ -622,10 +761,17 @@ export default function TripDetailPage() {
       </div>
 
       {/* Primary actions: one clear editing path, one situational path, utilities on demand. */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr .85fr', gap: 8, padding: '12px 20px' }}>
-        <button onClick={() => setChatOpen(true)} style={{ padding: '10px 8px', border: 'none', borderRadius: 12, background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', color: 'white', fontWeight: 750, cursor: 'pointer' }}>🤖 Chỉnh bằng AI</button>
-        <button onClick={() => { setAdaptError(''); setAdaptOpen(true); }} style={{ padding: '10px 8px', border: '1px solid rgba(255,127,107,.22)', borderRadius: 12, background: 'rgba(255,127,107,.08)', color: 'var(--coral)', fontWeight: 750, cursor: 'pointer' }}>⚡ Tình huống</button>
-        <button onClick={() => setToolsOpen(value => !value)} style={{ padding: '10px 8px', border: '1px solid rgba(26,29,59,.09)', borderRadius: 12, background: 'white', color: 'var(--navy)', fontWeight: 700, cursor: 'pointer' }}>••• Tiện ích</button>
+      {offlineSavedAt && <div role="status" style={{ padding: '4px 20px', fontSize: '.75rem', lineHeight: 1.6, color: 'var(--navy-muted)' }}>
+        ✓ Bản offline · {new Date(offlineSavedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' })}.{' '}
+        <a href={'/offline.html?trip=' + encodeURIComponent(String(params.id))} style={{ color: 'var(--coral)', fontWeight: 700 }}>Xem bản lưu</a>
+      </div>}
+      {!offlineSavedAt && !trip.is_shared && <p role="status" style={{ margin: '10px 20px', fontSize: '.78rem', lineHeight: 1.6, color: 'var(--navy-muted)' }}>
+        Chưa lưu được lịch trên máy. Hãy cho phép trình duyệt lưu dữ liệu và <button onClick={() => window.location.reload()} style={{ border: 'none', background: 'none', padding: 0, color: 'var(--coral)', textDecoration: 'underline', cursor: 'pointer' }}>tải lại lịch</button> trước khi đi để có bản đọc khi mất mạng.
+      </p>}
+      <div ref={chatToolbarRef} style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr .85fr', gap: 8, padding: '5px 20px 9px' }}>
+        <button onClick={() => setChatOpen(true)} className="trip-compact-control" style={{ padding: '7px 8px', fontSize: '.78rem', whiteSpace: 'nowrap', border: 'none', borderRadius: 12, background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', color: 'white', fontWeight: 750, cursor: 'pointer' }}>🤖 Hỏi AI</button>
+        <button onClick={() => { setAdaptError(''); setAdaptOpen(true); }} className="trip-compact-control" style={{ padding: '7px 8px', fontSize: '.78rem', whiteSpace: 'nowrap', border: '1px solid rgba(255,127,107,.22)', borderRadius: 12, background: 'rgba(255,127,107,.08)', color: 'var(--coral)', fontWeight: 750, cursor: 'pointer' }}>⚡ Đổi lịch</button>
+        <button onClick={() => setToolsOpen(value => !value)} className="trip-compact-control" style={{ padding: '7px 8px', fontSize: '.78rem', whiteSpace: 'nowrap', border: '1px solid rgba(26,29,59,.09)', borderRadius: 12, background: 'white', color: 'var(--navy)', fontWeight: 700, cursor: 'pointer' }}>••• Thêm</button>
       </div>
       {toolsOpen && <div style={{ margin: '0 20px 12px', padding: 10, display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, background: 'white', border: '1px solid rgba(26,29,59,.08)', borderRadius: 'var(--radius-md)' }}>
         <button onClick={handleCopy} style={{ padding: 9, border: 'none', background: 'rgba(26,29,59,.04)', borderRadius: 10, fontSize: '.75rem', fontWeight: 650 }}>{copied ? '✓ Đã sao chép' : '📋 Sao chép'}</button>
@@ -633,13 +779,27 @@ export default function TripDetailPage() {
         <button onClick={() => setShowEmergency(true)} style={{ padding: 9, border: 'none', background: 'rgba(239,68,68,.06)', color: '#B91C1C', borderRadius: 10, fontSize: '.75rem', fontWeight: 650 }}>🚨 Khẩn cấp</button>
       </div>}
 
+      <WeatherWidget compact weather={weatherData} onRetry={refreshWeather} style={{ margin: '0 20px 8px' }} />
+      {(weatherImpact.decision || weatherImpact.error) && <section aria-label="Thời tiết ảnh hưởng lịch trình" className="card trip-weather-impact" style={{ margin: '0 20px 8px', padding: '10px 12px' }}>
+        {weatherImpact.decision ? <>
+          <h2 style={{ fontSize: '.83rem', margin: 0 }}>{weatherImpact.decision.signals.includes('rain') ? 'Mưa ảnh hưởng phần lịch chưa đi' : 'Trời nóng, bạn nên cân nhắc nghỉ'}</h2>
+          <p style={{ fontSize: '.78rem', lineHeight: 1.4, margin: '4px 0 8px', color: 'var(--navy-muted)' }}>{weatherImpact.decision.reason}</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <button className="btn-primary trip-compact-control" disabled={autoReplanLoading || adapting} onClick={() => { setAdaptOpen(true); setAdaptPreview(null); void checkAutomaticReplan(true); }}>Xem phương án</button>
+            <button className="mood-chip trip-compact-control" onClick={weatherImpact.dismiss}>Giữ lịch hiện tại</button>
+          </div>
+        </> : <p role="status" style={{ fontSize: '.8rem', lineHeight: 1.6 }}>{weatherImpact.error} <button className="mood-chip" onClick={weatherImpact.retry}>Thử kiểm tra lại</button></p>}
+      </section>}
       {/* Weather banner */}
-      <p style={{ margin: '0 20px 12px', fontSize: '.8125rem', color: 'var(--navy-muted)', lineHeight: 1.5 }}>Giờ đi và chi phí là dự kiến. Kiểm tra giờ mở cửa và giá với địa điểm trước khi khởi hành. <Link href="/profile/feedback" style={{ color: 'var(--coral)' }}>Báo thông tin chưa đúng</Link></p>
-      {weather && !weatherDismissed && <WeatherBanner weather={weather} onDismiss={() => setWeatherDismissed(true)} />}
+      <details className="quiet-details trip-notes"><summary>Lưu ý chuyến đi</summary><p>Giờ đi và chi phí là dự kiến. Xác nhận giờ mở cửa và giá trước khi đi. <Link href="/profile/feedback">Báo thông tin chưa đúng</Link></p></details>
+      {weather && !weatherDismissed && !weatherImpact.decision && <WeatherBanner weather={weather} onDismiss={() => setWeatherDismissed(true)} />}
 
-      {feasibility && <FeasibilityAssistant
+      {feasibility && <FeasibilityAssistant compact
         feasibility={feasibility}
         activeDay={activeDay}
+        measuredRoute={measuredRoute?.provider === 'google' && measuredRoute.itinerarySnapshot === itineraryFingerprint(trip.itinerary) ? measuredRoute : null}
+        userLocation={userLocation} activities={allActivities}
+        onReviewRoute={() => { setAdaptOpen(true); void checkAutomaticReplan(); }}
         expanded={showFeasibility}
         onToggle={() => setShowFeasibility(value => !value)}
         onPreview={previewFeasibilityOptimization}
@@ -662,7 +822,7 @@ export default function TripDetailPage() {
       {userLocation && (() => {
         const acts = trip.itinerary?.days?.[activeDay]?.activities || [];
         const now = new Date();
-        const nowMin = now.getHours() * 60 + now.getMinutes();
+        const nowMin = getHueClock(now).minutes;
         const next = acts.find(a => {
           const [h, m] = (a.time || '').split(':').map(Number);
           return !isNaN(h) && (h * 60 + (m || 0)) >= nowMin && a.lat && a.lng;
@@ -683,10 +843,10 @@ export default function TripDetailPage() {
       })()}
 
       {/* Compact overview; details are progressive disclosure instead of separate cards. */}
-      <section style={{ margin: '0 20px 16px', padding: '14px 16px', background: 'white', border: '1px solid rgba(26,29,59,.08)', borderRadius: 'var(--radius-lg)' }}>
-        <button onClick={() => setOverviewOpen(value => !value)} style={{ width: '100%', padding: 0, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer' }}>
-          <span style={{ width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 12, background: 'rgba(255,127,107,.1)' }}>🧭</span>
-          <span style={{ flex: 1 }}><span style={{ display: 'block', fontWeight: 750, color: 'var(--navy)', fontSize: '.88rem' }}>Tổng quan chuyến đi</span><span style={{ display: 'block', marginTop: 3, color: 'var(--navy-muted)', fontSize: '.73rem' }}>{trip.duration} ngày · Dự kiến {trip.total_cost_estimate}</span></span>
+      <section className="trip-overview-compact" style={{ margin: '0 20px 8px', padding: '8px 12px', background: 'white', border: '1px solid rgba(26,29,59,.08)', borderRadius: 'var(--radius-lg)' }}>
+        <button className="trip-compact-control" aria-expanded={overviewOpen} onClick={() => setOverviewOpen(value => !value)} style={{ width: '100%', padding: 0, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer' }}>
+          <span style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 9, background: 'rgba(255,127,107,.1)' }}>🧭</span>
+          <span style={{ flex: 1 }}><span style={{ display: 'block', fontWeight: 750, color: 'var(--navy)', fontSize: '.8rem' }}>Tổng quan chuyến đi</span><span style={{ display: 'block', marginTop: 1, color: 'var(--navy-muted)', fontSize: '.72rem' }}>{trip.duration} ngày · Dự kiến {trip.total_cost_estimate}</span></span>
           <span style={{ color: 'var(--navy-muted)' }}>{overviewOpen ? '⌃' : '⌄'}</span>
         </button>
         {overviewOpen && <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(26,29,59,.06)' }}>
@@ -697,29 +857,35 @@ export default function TripDetailPage() {
       </section>
 
       {/* Day tabs */}
-      <div style={{ display: 'flex', overflowX: 'auto', padding: '0 20px', borderBottom: '1px solid rgba(26,29,59,0.06)' }}>
+      <div aria-label="Ngày trong hành trình" style={{ display: 'flex', overflowX: 'auto', padding: '0 20px', borderBottom: '1px solid rgba(26,29,59,0.06)' }}>
         {(trip.itinerary?.days || []).map((day, i) => (
-          <button key={i} onClick={() => { setActiveDay(i); setActiveActivity(null); }}
-            style={{ padding: '10px 16px', background: 'none', border: 'none', borderBottom: `2.5px solid ${activeDay === i ? 'var(--coral)' : 'transparent'}`, cursor: 'pointer', fontFamily: 'var(--font)', fontSize: '0.8125rem', fontWeight: activeDay === i ? 700 : 500, color: activeDay === i ? 'var(--coral)' : 'var(--navy-muted)', whiteSpace: 'nowrap', transition: 'all 0.2s', marginBottom: -1 }}>
+          <button className="trip-compact-control" key={i} onClick={() => selectTripDay(i)} disabled={Boolean(token) && (progressStatus === 'loading' || progressStatus === 'saving' || progressStatus === 'error')}
+            style={{ padding: '8px 14px', background: 'none', border: 'none', borderBottom: `2.5px solid ${activeDay === i ? 'var(--coral)' : 'transparent'}`, cursor: 'pointer', fontFamily: 'var(--font)', fontSize: '0.8125rem', fontWeight: activeDay === i ? 700 : 500, color: activeDay === i ? 'var(--coral)' : 'var(--navy-muted)', whiteSpace: 'nowrap', transition: 'all 0.2s', marginBottom: -1 }}>
             Ngày {day.day}
           </button>
         ))}
       </div>
 
       {/* View toggle */}
-      <div style={{ display: 'flex', margin: '12px 20px', background: 'rgba(26,29,59,0.05)', borderRadius: 'var(--radius-full)', padding: 3 }}>
+      <div ref={tripViewControlsRef} aria-label="Chế độ xem hành trình" style={{ display: 'flex', margin: '6px 20px', background: 'rgba(26,29,59,0.05)', borderRadius: 'var(--radius-full)', padding: 3 }}>
         {(['timeline', 'map'] as const).map(mode => (
-          <button key={mode} onClick={() => setViewMode(mode)} style={{ flex: 1, padding: '9px', border: 'none', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: '0.8125rem', fontWeight: 600, borderRadius: 'var(--radius-full)', background: viewMode === mode ? 'white' : 'transparent', color: viewMode === mode ? 'var(--navy)' : 'var(--navy-muted)', boxShadow: viewMode === mode ? '0 1px 6px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>
+          <button className="trip-compact-control" aria-pressed={viewMode === mode} key={mode} onClick={() => setViewMode(mode)} style={{ flex: 1, padding: '7px', border: 'none', cursor: 'pointer', fontFamily: 'var(--font)', fontSize: '0.8125rem', fontWeight: 600, borderRadius: 'var(--radius-full)', background: viewMode === mode ? 'white' : 'transparent', color: viewMode === mode ? 'var(--navy)' : 'var(--navy-muted)', boxShadow: viewMode === mode ? '0 1px 6px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.2s' }}>
             {mode === 'timeline' ? '📅 Lịch trình' : '🗺️ Bản đồ'}
           </button>
         ))}
       </div>
 
-      {viewMode === 'map' && (
-        <div style={{ margin: '0 20px 16px', borderRadius: 'var(--radius-lg)', overflow: 'hidden', height: 380, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}>
-          <CinematicMap activities={allActivities} activeIndex={activeActivity ?? undefined} userLocation={userLocation} />
-        </div>
-      )}
+      {viewMode === 'timeline' && progressPanel}
+      {viewMode === 'map' && <TripNavigation
+        tripId={String(params.id)} dayIndex={activeDay} itinerarySnapshot={itineraryFingerprint(trip.itinerary)}
+        activities={allActivities} completedIndexes={progress.completedActivityIndexes} token={token} initialTargetIndex={activeActivity}
+        canStartNavigation={canTrack && activeDay === todayIndex}
+        onLocation={(point: RoutePoint | null) => setUserLocation(point)}
+        onMarkDone={toggleActivityDone} onRouteMeasured={setMeasuredRoute}
+        onReviewSchedule={() => { setAdaptOpen(true); void checkAutomaticReplan(); }}
+      />}
+      {viewMode === 'map' && progressPanel}
+
       {viewMode === 'timeline' && currentDay && (
         <div style={{ padding: '0 20px' }}>
           <div style={{ marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -739,6 +905,7 @@ export default function TripDetailPage() {
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {allActivities.map((act, i) => {
               const isOpen = activeActivity === i;
+              const isDone = progress.completedActivityIndexes.includes(i);
               return (
                 <div key={i} style={{ display: 'flex' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 44, flexShrink: 0 }}>
@@ -751,7 +918,7 @@ export default function TripDetailPage() {
                         <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--coral)' }}>{act.time}</span>
                         <span style={{ fontSize: '0.7rem', color: 'var(--navy-muted)' }}>{act.duration}</span>
                       </div>
-                      <p style={{ fontWeight: 700, fontSize: '0.9375rem', color: 'var(--navy)', margin: '0 0 2px' }}>{act.name}</p>
+                      <p style={{ fontWeight: 700, fontSize: '0.9375rem', color: 'var(--navy)', margin: '0 0 2px' }}>{act.name}{isDone && <span style={{ marginLeft: 8, fontSize: '.72rem', color: '#166534' }}>✓ Đã đi</span>}</p>
                       {act.location && <p style={{ fontSize: '0.75rem', color: 'var(--navy-muted)', margin: 0 }}>📍 {act.location}</p>}
                     </button>
                     {isOpen && (
@@ -766,8 +933,11 @@ export default function TripDetailPage() {
                           <span style={{ fontSize: '0.8rem', color: 'var(--navy-muted)' }}>Chi phí</span>
                           <span style={{ fontSize: '0.875rem', fontWeight: 700, color: act.cost ? 'var(--navy)' : '#4CAF50' }}>{act.cost || 'Miễn phí'}</span>
                         </div>
+                        {tripState && <button aria-pressed={isDone} disabled={!canTrack} onClick={() => toggleActivityDone(i)} style={{ width: '100%', marginBottom: 10, padding: 10, borderRadius: 12, border: '1px solid #b6cec0', color: '#166534', background: isDone ? '#eaf4ed' : 'white', cursor: canTrack ? 'pointer' : 'not-allowed', opacity: canTrack ? 1 : .6 }}>
+                          {isDone ? 'Bỏ đánh dấu đã đi' : 'Đánh dấu đã đi xong'}
+                        </button>}
                         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                          <a href={mapsUrl(act)} target="_blank" rel="noreferrer" style={{ flex: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px", background: "linear-gradient(135deg,var(--coral),var(--warm-orange))", color: "white", borderRadius: "var(--radius-full)", fontWeight: 700, fontSize: "0.8125rem", textDecoration: "none" }}>🗺️ Chỉ đường</a>
+                          <button onClick={() => { setActiveActivity(i); setViewMode('map'); }} style={{ flex: 2, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "10px", background: "linear-gradient(135deg,var(--coral),var(--warm-orange))", color: "white", borderRadius: "var(--radius-full)", fontWeight: 700, fontSize: "0.8125rem", cursor: "pointer", border: "none" }}>🗺️ Chỉ đường trong app</button>
                           <button onClick={() => openEdit(activeDay, i)} style={{ flex: 1, padding: '10px', background: 'rgba(26,29,59,0.05)', border: '1px solid rgba(26,29,59,0.1)', borderRadius: 'var(--radius-full)', fontWeight: 600, fontSize: '0.8rem', color: 'var(--navy)', cursor: 'pointer', fontFamily: 'var(--font)' }}>✏️</button>
                           <button onClick={() => { if (confirm('Xóa hoạt động này?')) deleteActivity(activeDay, i); }} style={{ flex: 1, padding: '10px', background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 'var(--radius-full)', fontWeight: 600, fontSize: '0.8rem', color: '#EF4444', cursor: 'pointer', fontFamily: 'var(--font)' }}>🗑️</button>
                         </div>
@@ -791,25 +961,21 @@ export default function TripDetailPage() {
           </div>
         </div>
       )}
-      <button onClick={() => setChatOpen(v => !v)} style={{ position: 'fixed', bottom: 84, right: 20, width: 52, height: 52, borderRadius: '50%', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', border: 'none', boxShadow: '0 4px 20px rgba(255,127,107,0.4)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, zIndex: 40 }}>
+      <button aria-label={chatOpen ? "Đóng trợ lý" : "Mở trợ lý"} onClick={() => setChatOpen(v => !v)} style={{ position: 'fixed', bottom: 'calc(20px + env(safe-area-inset-bottom, 0px))', right: 'max(20px, calc((100vw - 720px) / 2 + 20px))', width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', border: 'none', boxShadow: '0 4px 20px rgba(255,127,107,0.4)', cursor: 'pointer', display: chatOpen || !chatEntryVisible ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center', fontSize: 22, zIndex: 40 }}>
         {chatOpen ? '×' : '💬'}
       </button>
       {chatOpen && (
-        <div style={{ position: 'fixed', bottom: 148, right: 16, width: 'min(360px, calc(100vw - 32px))', height: 420, background: 'white', borderRadius: 'var(--radius-xl)', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', zIndex: 40, overflow: 'hidden' }}>
+        <div style={{ position: 'fixed', bottom: 'calc(76px + env(safe-area-inset-bottom, 0px))', right: 'max(16px, calc((100vw - 720px) / 2 + 16px))', width: 'min(360px, calc(100vw - 32px))', height: 'min(480px, calc(100dvh - 180px))', background: 'white', borderRadius: 'var(--radius-xl)', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', zIndex: 60, overflow: 'hidden' }}>
           <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(26,29,59,0.06)', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', color: 'white' }}>
             <p style={{ fontWeight: 700, margin: 0, fontSize: '0.9375rem' }}>🤖 Trợ lý lịch trình</p>
-            <p style={{ fontSize: '0.75rem', margin: 0, opacity: 0.88 }}>Hỏi hoặc yêu cầu chỉnh lịch — chỉ lưu sau khi bạn xác nhận.</p>
+            <p style={{ fontSize: '0.75rem', margin: 0, opacity: 0.88 }}>Chỉnh lịch sau khi bạn xác nhận.</p>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             {chatMessages.length === 0 && (
               <div style={{ textAlign: 'center', color: 'var(--navy-muted)', paddingTop: 24 }}>
                 <p style={{ fontSize: '2rem', marginBottom: 8 }}>👋</p>
                 <p style={{ fontSize: '0.85rem' }}>Chào! Tôi có thể giúp gì cho chuyến đi của bạn?</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
-                  {['Thêm một quán ăn gần tuyến','Dời hoạt động chiều muộn hơn','Lịch hôm nay có quá dày không?'].map(q => (
-                    <button key={q} onClick={() => { setChatInput(q); }} style={{ padding: '6px 12px', background: 'rgba(255,127,107,0.07)', border: '1px solid rgba(255,127,107,0.2)', borderRadius: 'var(--radius-full)', fontSize: '0.75rem', color: 'var(--coral)', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font)' }}>{q}</button>
-                  ))}
-                </div>
+
               </div>
             )}
             {chatMessages.map((msg, i) => (
@@ -831,9 +997,21 @@ export default function TripDetailPage() {
             {chatLoading && <div style={{ display: 'flex', gap: 4, padding: '8px 12px', width: 'fit-content' }}>{[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--coral)', animation: 'bounce 1s ease infinite', animationDelay: i * 0.2 + 's' }} />)}</div>}
             <div ref={chatEndRef} />
           </div>
+          <div className="chat-question-picker">
+            <label htmlFor="trip-chat-question">Hỏi nhanh</label>
+            <select id="trip-chat-question" value="" disabled={chatLoading} onChange={event => { if (event.target.value) setChatInput(event.target.value); }}>
+              <option value="" disabled>Chọn câu hỏi gợi ý…</option>
+              <optgroup label="Trong chuyến đi">
+                {['Tiếp theo tôi đi đâu?', 'Hôm nay còn những điểm nào?', 'Tôi đang mệt, nên nghỉ ở đâu?'].map(q => <option key={q} value={q}>{q}</option>)}
+              </optgroup>
+              <optgroup label="Điều chỉnh lịch">
+                {['Thêm một quán ăn gần tuyến', 'Dời hoạt động chiều muộn hơn', 'Trời mưa, gợi ý điểm trong nhà', 'Giảm bớt điểm để đi thư giãn hơn'].map(q => <option key={q} value={q}>{q}</option>)}
+              </optgroup>
+            </select>
+          </div>
           <div style={{ padding: '10px 12px', borderTop: '1px solid rgba(26,29,59,0.06)', display: 'flex', gap: 8 }}>
-            <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendChat()} placeholder='Nhập câu hỏi...' style={{ flex: 1, padding: '9px 14px', border: '1.5px solid rgba(26,29,59,0.1)', borderRadius: 'var(--radius-full)', fontFamily: 'var(--font)', fontSize: '0.875rem', outline: 'none', background: 'rgba(26,29,59,0.03)', color: 'var(--navy)' }} />
-            <button onClick={sendChat} disabled={chatLoading} style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <input aria-label="Câu hỏi cho trợ lý" value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendChat()} placeholder='Nhập câu hỏi...' style={{ flex: 1, minWidth: 0, padding: '9px 14px', border: '1.5px solid rgba(26,29,59,0.1)', borderRadius: 'var(--radius-full)', fontFamily: 'var(--font)', fontSize: '0.875rem', outline: 'none', background: 'rgba(26,29,59,0.03)', color: 'var(--navy)' }} />
+            <button aria-label="Gửi câu hỏi" onClick={sendChat} disabled={chatLoading || !chatInput.trim()} style={{ width: 38, height: 38, borderRadius: '50%', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             </button>
           </div>
@@ -867,6 +1045,10 @@ export default function TripDetailPage() {
               <div><p className="section-eyebrow">ĐIỀU CHỈNH CHUYẾN ĐI</p><h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--navy)', margin: 0 }}>Chuyện gì vừa xảy ra?</h3><p style={{ fontSize: '.8rem', color: 'var(--navy-muted)', margin: '4px 0 0' }}>HueViVu chuẩn bị phương án cho ngày {activeDay + 1}. Bạn xem trước rồi chọn áp dụng hoặc giữ lịch cũ.</p></div>
               <button onClick={() => { setAdaptOpen(false); setAdaptPreview(null); setAdaptError(''); }} disabled={adapting} style={{ border: 'none', background: 'rgba(26,29,59,.06)', width: 34, height: 34, borderRadius: '50%', fontSize: 20 }}>×</button>
             </div>
+            {locationNotice && <p role="status" style={{ fontSize: '.78rem', lineHeight: 1.6, color: 'var(--navy-muted)' }}>{locationNotice}</p>}
+            <button onClick={() => checkAutomaticReplan()} disabled={autoReplanLoading || adapting} style={{ width: '100%', marginBottom: 10, padding: '11px 14px', border: '1px solid rgba(255,127,107,.25)', borderRadius: 'var(--radius-full)', background: 'rgba(255,127,107,.08)', color: 'var(--coral)', fontWeight: 800, cursor: 'pointer' }}>
+              {autoReplanLoading ? '🔎 Đang kiểm tra thời tiết và lịch…' : '✨ HueViVu tự kiểm tra: Có nên đổi lịch không?'}
+            </button>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9 }}>
               {[
                 ['rain', '🌧️', 'Trời đang mưa', 'Đổi tối đa 3 điểm ngoài trời'],
@@ -881,8 +1063,14 @@ export default function TripDetailPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div><p style={{ fontWeight: 700, color: 'var(--navy)', margin: 0 }}>⏰ Tôi đang đến trễ</p><p style={{ fontSize: '.72rem', color: 'var(--navy-muted)', margin: '2px 0 0' }}>Lùi phần lịch còn lại, tự bỏ hoạt động vượt 22:00.</p></div><select value={delayMinutes} onChange={e => setDelayMinutes(Number(e.target.value))} style={{ padding: '7px 9px', border: '1px solid rgba(26,29,59,.12)', borderRadius: 10, background: 'white' }}><option value={30}>30 phút</option><option value={45}>45 phút</option><option value={60}>60 phút</option><option value={90}>90 phút</option></select></div>
               <button onClick={() => applyAdaptation('late')} disabled={adapting} style={{ width: '100%', marginTop: 10, padding: 10, border: 'none', borderRadius: 'var(--radius-full)', background: 'linear-gradient(135deg,var(--coral),var(--warm-orange))', color: 'white', fontWeight: 700 }}>{adapting ? 'Đang tính lại…' : `Xem phương án lùi ${delayMinutes} phút`}</button>
             </div>
-            {adaptPreview && <div role="region" aria-label="Xem trước điều chỉnh" style={{ marginTop: 16, padding: 14, border: '1px solid rgba(255,127,107,.3)', borderRadius: 12 }}>
+            {adaptError && adaptError.includes('Chưa có điểm cùng loại') && <Link href="/explore" style={{ display: 'inline-block', marginTop: 8, fontSize: '.8rem', color: 'var(--coral)', fontWeight: 700 }}>Xem điểm khác rồi gọi xác nhận</Link>}
+            {adaptError && adaptError.includes('Chưa tìm được điểm trong nhà') && <Link href="/explore?indoor=true" style={{ display: 'inline-block', marginTop: 8, fontSize: '.8rem', color: 'var(--coral)', fontWeight: 700 }}>Xem nơi trong nhà được ghi nhận</Link>}
+            {adaptError && adaptError.includes('giờ ăn tối') && <Link href="/explore?cat=food&open=true" style={{ display: 'inline-block', marginTop: 8, fontSize: '.8rem', color: 'var(--coral)', fontWeight: 700 }}>Tìm nơi ăn đang mở, rồi gọi xác nhận</Link>}
+            {adaptPreview && <div ref={adaptPreviewRef} tabIndex={-1} role="region" aria-label="Xem trước điều chỉnh" style={{ marginTop: 16, padding: 14, border: '1px solid rgba(255,127,107,.3)', borderRadius: 12 }}>
               <h4 style={{ marginBottom: 8 }}>Phương án cho ngày {adaptPreview.dayIndex + 1}</h4>
+              {adaptPreview.decision?.reason && <p style={{ fontSize: '.78rem', color: 'var(--navy-muted)', marginBottom: 8 }}>💡 {adaptPreview.decision.reason}</p>}
+              {adaptPreview.routeImpact && <p style={{ fontSize: '.78rem', color: 'var(--navy-muted)', marginBottom: 8 }}>Đường Google đến {adaptPreview.routeImpact.nextActivity}: khoảng {(adaptPreview.routeImpact.distanceMeters / 1000).toFixed(1)} km, {adaptPreview.routeImpact.durationMinutes} phút. {adaptPreview.routeImpact.replacement && <>Điểm thay thế {adaptPreview.routeImpact.replacement.destination}: khoảng {(adaptPreview.routeImpact.replacement.distanceMeters / 1000).toFixed(1)} km, {adaptPreview.routeImpact.replacement.durationMinutes} phút.</>}</p>}
+
               <p style={{ fontSize: '.8rem', marginBottom: 8 }}>Lịch hiện tại vẫn được giữ. Xem giờ và điểm đến mới rồi chọn áp dụng.</p>
               {adaptPreview.changes.map((change: string, i: number) => <p key={i} style={{ fontSize: '.8rem', marginBottom: 6 }}>{change}</p>)}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: '.75rem' }}>

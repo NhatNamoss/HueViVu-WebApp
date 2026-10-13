@@ -86,6 +86,14 @@ function cleanup() {
       assert(response.status === 200 && Array.isArray(body), 'place list unavailable');
       assert(body.every(place => /^[a-z_]+$/.test(place.category)), 'legacy category remains');
     });
+    await test('indoor discovery only returns published places with indoor metadata', async () => {
+      const all = await request('/api/places');
+      const indoor = await request('/api/places?indoor=true');
+      assert(indoor.response.ok && indoor.body.every(place => place.indoor === true), 'indoor discovery includes outdoor or unknown places');
+      assert(indoor.body.length === all.body.filter(place => place.indoor === true).length, 'indoor filter loses or adds records');
+      const invalid = await request('/api/places?indoor=maybe');
+      assert(invalid.response.status === 400, 'invalid indoor parameter accepted');
+    });
     await test('Live Guide fallback does not pretend to recognize an image', async () => {
       const result = await request('/api/vision', { method: 'POST', headers: headers('', true), body: JSON.stringify({ image: 'data:image/jpeg;base64,AA==', mode: 'identify' }) });
       if (result.body?.source === 'catalog-fallback') {
@@ -174,6 +182,26 @@ function cleanup() {
       assert(result.body.feasibility?.score >= 70, `new trip failed quality gate: ${result.body.feasibility?.score}`);
       assert(result.body.trip.days.every(day => day.activities.length <= 7), 'new trip is overloaded');
       tripId = result.body.tripId; guestToken = result.body.token;
+      result = await request(`/api/trips/${tripId}/state`);
+      assert(result.response.status === 401, 'anonymous trip state access accepted');
+      result = await request(`/api/trips/${tripId}/state`, { headers: headers(guestToken) });
+      assert(result.response.ok && result.body.state?.tripId === tripId, 'trip state read failed');
+      result = await request(`/api/trips/${tripId}/state`, {
+        method: 'PUT',
+        headers: headers(guestToken, true),
+        body: JSON.stringify({
+          dayIndex: 0,
+          currentActivityIndex: 0,
+          completedActivityIndexes: [0],
+          visitedPlaceIds: ['smoke-place'],
+          fatigue: 'okay',
+          travelMode: 'walking',
+          lastLocation: { lat: 16.4637, lng: 107.5909, accuracy: 20 },
+          lastWeather: { condition: 'rainy', temp: 28 },
+        }),
+      });
+      assert(result.response.ok && result.body.state.completedActivityIndexes.includes(0), 'trip state persistence failed');
+      assert(result.body.state.lastLocation?.lat === 16.4637, 'trip location state was not persisted');
       const identity = await request('/api/auth/me', { headers: headers(guestToken) });
       guestIds.add(identity.body.id);
       result = await request(`/api/trips/${tripId}`); assert(result.response.status === 404, 'private trip leaked');
@@ -187,6 +215,78 @@ function cleanup() {
       const afterPreview = await request(`/api/trips/${tripId}`, { headers: headers(guestToken) });
       assert(JSON.stringify(beforePreview.body.itinerary) === JSON.stringify(afterPreview.body.itinerary), 'preview modified the saved itinerary');
       result = await request(`/api/trips/${tripId}/optimize`, { method: 'POST', headers: headers(guestToken, true) }); assert(result.response.ok && result.body.feasibility.score >= scoreBeforeOptimize, 'feasibility optimizer did not preserve or improve score');
+    });
+    await test('trip state rejects malformed values and preserves the saved state', async () => {
+      const before = await request(`/api/trips/${tripId}/state`, { headers: headers(guestToken) });
+      for (const invalid of [null, [], { dayIndex: 999 }, { currentActivityIndex: 999 }, { completedActivityIndexes: 'invalid' }, { completedActivityIndexes: [999] }, { visitedPlaceIds: null }, { fatigue: 'invalid' }, { travelMode: 'plane' }, { lastLocation: { lat: 100, lng: 107 } }, { lastLocation: 'invalid' }, { lastWeather: { temp: 'hot' } }, { startedAt: 'invalid' }]) {
+        const result = await request(`/api/trips/${tripId}/state`, { method: 'PUT', headers: headers(guestToken, true), body: JSON.stringify(invalid) });
+        assert(result.response.status === 400, `invalid state accepted: ${JSON.stringify(invalid)} (${result.response.status})`);
+      }
+      const malformed = await request(`/api/trips/${tripId}/state`, { method: 'PUT', headers: headers(guestToken, true), body: '{' });
+      assert(malformed.response.status === 400, 'malformed JSON was accepted');
+      const forbidden = await request(`/api/trips/${tripId}/state`, { method: 'PUT', headers: headers(userToken, true), body: '{}' });
+      assert(forbidden.response.status === 404, 'other user changed private trip state');
+      const after = await request(`/api/trips/${tripId}/state`, { headers: headers(guestToken) });
+      assert(JSON.stringify(before.body.state) === JSON.stringify(after.body.state), 'invalid state changed saved travel state');
+    });
+    await test('daily progress survives day switching and stale writes are rejected', async () => {
+      let result = await request(`/api/trips/${tripId}/state`, { method: 'PUT', headers: headers(guestToken, true), body: JSON.stringify({ dayIndex: 0, completedActivityIndexes: [0] }) });
+      assert(result.response.ok, JSON.stringify(result.body));
+      const stale = result.body.state.updatedAt;
+      result = await request(`/api/trips/${tripId}/state`, { method: 'PUT', headers: headers(guestToken, true), body: JSON.stringify({ dayIndex: 1 }) });
+      assert(result.response.ok && result.body.state.completedActivityIndexes.length === 0, 'day-one completion leaked to day two');
+      result = await request(`/api/trips/${tripId}/state`, { method: 'PUT', headers: headers(guestToken, true), body: JSON.stringify({ dayIndex: 1, completedActivityIndexes: [0] }) });
+      assert(result.response.ok, JSON.stringify(result.body));
+      result = await request(`/api/trips/${tripId}/state`, { method: 'PUT', headers: headers(guestToken, true), body: JSON.stringify({ dayIndex: 0 }) });
+      assert(result.response.ok && result.body.state.completedActivityIndexes.includes(0), 'day-one progress was lost');
+      const conflict = await request(`/api/trips/${tripId}/state`, { method: 'PUT', headers: headers(guestToken, true), body: JSON.stringify({ fatigue: 'tired', expectedUpdatedAt: stale }) });
+      assert(conflict.response.status === 409, 'stale progress overwrote a newer state');
+      const badClosure = await request(`/api/trips/${tripId}/adapt`, { method: 'POST', headers: headers(guestToken, true), body: JSON.stringify({ scenario: 'closed', dayIndex: 0, activityIndex: 999, currentTime: '10:00', preview: true }) });
+      assert(badClosure.response.status === 400, 'invalid closure target caused a server error');
+      const wrongActivities = await request(`/api/trips/${tripId}/state`, { method: 'PUT', headers: headers(guestToken, true), body: JSON.stringify({ completedActivityIndexes: [0], expectedActivityKeys: ['stale'] }) });
+      assert(wrongActivities.response.status === 409, 'completion from a stale itinerary was accepted');
+    });
+    await test('automatic replan respects future dates, unstarted trips and ownership', async () => {
+      const unstarted = await request(`/api/trips/${tripId}/replan`, { method: 'POST', headers: headers(guestToken, true), body: '{}' });
+      assert(unstarted.response.ok && unstarted.body.changed === false, 'unstarted trip was automatically changed');
+      const generated = await request('/api/trips', { method: 'POST', headers: headers('', true), body: JSON.stringify({ duration: 1, styles: ['Ẩm thực'], companion: 'solo', budget: 300, startDate: '2099-01-01' }) });
+      assert(generated.response.ok, JSON.stringify(generated.body));
+      const identity = await request('/api/auth/me', { headers: headers(generated.body.token) }); guestIds.add(identity.body.id);
+      const id = generated.body.tripId;
+      const before = await request(`/api/trips/${id}`, { headers: headers(generated.body.token) });
+      const preview = await request(`/api/trips/${id}/replan`, { method: 'POST', headers: headers(generated.body.token, true), body: JSON.stringify({ dayIndex: 0, weather: { condition: 'rainy' } }) });
+      assert(preview.response.ok && preview.body.changed === false && preview.body.message.includes('chưa tới'), 'future trip was treated as a live trip');
+      const after = await request(`/api/trips/${id}`, { headers: headers(generated.body.token) });
+      assert(JSON.stringify(before.body.itinerary) === JSON.stringify(after.body.itinerary), 'automatic preview modified a trip');
+      for (const invalid of [null, [], { dayIndex: -1 }, { delayMinutes: '45' }, { lat: 100, lng: 107 }]) {
+        const result = await request(`/api/trips/${id}/replan`, { method: 'POST', headers: headers(generated.body.token, true), body: JSON.stringify(invalid) });
+        assert(result.response.status === 400, 'invalid automatic replan request accepted');
+      }
+      const forbidden = await request(`/api/trips/${id}/replan`, { method: 'POST', headers: headers(guestToken, true), body: '{}' });
+      assert(forbidden.response.status === 404, 'another guest can replan a private trip');
+    });
+    await test('starting an undated trip requires an explicit date choice', async () => {
+      const before = await request(`/api/trips/${tripId}`, { headers: headers(guestToken) });
+      assert(!before.body.start_date, 'fixture already has a start date');
+      const result = await request(`/api/trips/${tripId}/state`, { method: 'PUT', headers: headers(guestToken, true), body: JSON.stringify({ startTodayIfMissing: true }) });
+      assert(result.response.ok && result.body.startDate && result.body.state.startedAt, 'explicit start-today choice failed');
+      const after = await request(`/api/trips/${tripId}`, { headers: headers(guestToken) });
+      assert(after.body.start_date === result.body.startDate && JSON.stringify(before.body.itinerary) === JSON.stringify(after.body.itinerary), 'start-today changed the itinerary');
+      const duplicate = await request(`/api/trips/${tripId}/state`, { method: 'PUT', headers: headers(guestToken, true), body: JSON.stringify({ startTodayIfMissing: true }) });
+      assert(duplicate.response.status === 409, 'start-today overwrote an existing start date');
+      const listed = await request('/api/trips', { headers: headers(guestToken) });
+      assert(listed.body.find(trip => trip.id === tripId)?.started_at, 'started trip state not available to homepage');
+    });
+    await test('adaptation preserves completed activities and detects changed progress', async () => {
+      const before = await request(`/api/trips/${tripId}`, { headers: headers(guestToken) });
+      const state = await request(`/api/trips/${tripId}/state`, { headers: headers(guestToken) });
+      const completed = state.body.state.completedActivityIndexes.map(i => before.body.itinerary.days[0].activities[i]);
+      const preview = await request(`/api/trips/${tripId}/adapt`, { method: 'POST', headers: headers(guestToken, true), body: JSON.stringify({ scenario: 'late', dayIndex: 0, currentTime: '07:00', delayMinutes: 30, preview: true }) });
+      assert(preview.response.ok && preview.body.preview, 'adapt preview unavailable');
+      for (const activity of completed) assert(preview.body.itinerary.days[0].activities.some(value => JSON.stringify(value) === JSON.stringify(activity)), 'preview changed a completed activity');
+      await request(`/api/trips/${tripId}/state`, { method: 'PUT', headers: headers(guestToken, true), body: JSON.stringify({ fatigue: 'okay' }) });
+      const conflict = await request(`/api/trips/${tripId}/adapt`, { method: 'POST', headers: headers(guestToken, true), body: JSON.stringify({ scenario: 'late', dayIndex: 0, currentTime: '07:00', delayMinutes: 30, expectedItinerary: preview.body.expectedItinerary, expectedStateUpdatedAt: preview.body.expectedStateUpdatedAt }) });
+      assert(conflict.response.status === 409, 'changed progress was not detected before applying a preview');
     });
     await test('guest session replay cannot recover another identity', async () => {
       const result = await request('/api/trips', { method: 'POST', headers: headers('', true), body: JSON.stringify({ duration: 1, styles: ['Ẩm thực'], companion: 'solo', budget: 300, sessionId: marker }) });

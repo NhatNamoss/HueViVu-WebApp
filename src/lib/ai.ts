@@ -1,3 +1,4 @@
+import { evaluatePlaceTrust } from './place-trust';
 import { getDb } from './db';
 
 // ── JSON extraction from AI output ─────────────────────────────────────────
@@ -153,7 +154,7 @@ function generateLocalFallbackTrip({ duration, budget }: {
   companion: string; budget: number; food?: string[];
 }): any {
   const db = getDb();
-  const allPlaces = db.prepare('SELECT * FROM places').all() as any[];
+  const allPlaces = db.prepare("SELECT * FROM places WHERE publication_status = 'published'").all() as any[];
   const dur = Number(duration) || 2;
 
   const sightseeing = allPlaces.filter(p => ['heritage', 'temple', 'nature', 'craft_village', 'experience'].includes(p.category));
@@ -222,7 +223,7 @@ export async function generateTrip({ duration, styles, companion, budget, food, 
 
   // Gom địa điểm theo cụm địa lý TRƯỚC — AI chỉ cần điền theme/mô tả, không tự quyết địa lý
   const db = getDb();
-  const allPlaces = db.prepare('SELECT id, name, category, address, price, lat, lng, avg_visit_min, popularity FROM places').all() as any[];
+  const allPlaces = db.prepare("SELECT id, name, category, address, price, lat, lng, avg_visit_min, popularity FROM places WHERE publication_status = 'published'").all() as any[];
   const sightseeing = allPlaces.filter((p: any) => ['heritage', 'temple', 'nature', 'craft_village', 'experience'].includes(p.category));
   const foods = allPlaces.filter((p: any) => ['food', 'market'].includes(p.category));
   const cafes = allPlaces.filter((p: any) => p.category === 'cafe');
@@ -303,8 +304,8 @@ export async function chat(messages: any[], tripContext?: any): Promise<string> 
   const lastUser = messages[messages.length - 1]?.content || '';
 
   const db = getDb();
-  const dbPlaces = db.prepare("SELECT name, category, price, address FROM places WHERE publication_status = 'published'").all() as any[];
-  const placesContext = dbPlaces.map(p => `- ${p.name} (Loại: ${p.category}, Giá: ${p.price || 'Miễn phí'}) - ${p.address || 'Huế'}`).join('\n');
+  const dbPlaces = db.prepare("SELECT * FROM places WHERE publication_status = 'published'").all() as any[];
+  const placesContext = dbPlaces.map(p => { const trust = evaluatePlaceTrust(p); return `- ${p.name} (${p.category}) · ${p.address || 'Chưa có địa chỉ'} · ${trust.label} · Giá: ${trust.operationalFresh ? p.price || 'chưa có' : 'chưa xác nhận'} · Nguồn: ${p.source_name || 'chưa có'}`; }).join('\n');
 
   let rules = '';
   let qas = '';
@@ -353,7 +354,8 @@ Quy tắc chung:
 1. Bạn chỉ gợi ý các địa điểm có trong dữ liệu dưới đây.
 2. Không bịa đặt thêm địa điểm ngoài danh sách này.
 3. Nếu người dùng hỏi địa điểm không có trong danh sách, hãy nói bạn chưa có thông tin và gợi ý điểm khác.
-4. Trả lời bằng tiếng Việt, ngắn gọn (dưới 100 từ), thân thiện.
+4. Không suy đoán giờ mở cửa, giá, điện thoại hoặc khẳng định đang mở. Chỉ dùng dữ liệu đã xác minh còn mới; nếu thiếu/cũ hãy yêu cầu kiểm tra trực tiếp. Giờ và chi phí trong lịch trình chỉ là dự kiến.
+5. Trả lời bằng tiếng Việt, ngắn gọn (dưới 100 từ), thân thiện.
 ${rules ? '\nQuy tắc bổ sung (ƯU TIÊN TUÂN THỦ):\n' + rules : ''}
 ${qas ? '\nKiến thức Q&A (Sử dụng để trả lời các câu hỏi tương tự):\n' + qas : ''}
 

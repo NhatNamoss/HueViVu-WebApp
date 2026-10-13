@@ -16,7 +16,7 @@ function parseChecklist(desc: string) {
 
 export default function TaskTracker({ placeId }: { placeId?: string }) {
   const [tasks, setTasks] = useState<any[]>([]);
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [resolving, setResolving] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [checked, setChecked] = useState<Record<string, Set<number>>>({});
@@ -43,13 +43,13 @@ export default function TaskTracker({ placeId }: { placeId?: string }) {
   if (!tasks.length) return null;
 
   return (<>
-    <button onClick={() => setOpen(o => !o)} className="fixed bottom-4 right-4 z-40 w-12 h-12 bg-orange-500 text-white rounded-full shadow-lg flex items-center justify-center text-lg hover:bg-orange-600" title="Nhiệm vụ đang xử lý">
+    <button aria-label="Nhiệm vụ đang xử lý" aria-expanded={open} onClick={() => setOpen(o => !o)} className="fixed bottom-4 right-4 z-40 w-12 h-12 bg-orange-500 text-white rounded-full shadow-lg flex items-center justify-center text-lg hover:bg-orange-600" title="Nhiệm vụ đang xử lý">
       ✅<span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">{tasks.length}</span>
     </button>
-    {open && <div className="fixed bottom-20 right-4 z-40 w-[380px] max-h-[70vh] bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+    {open && <div className="fixed bottom-20 right-4 z-40 w-[380px] max-w-[calc(100vw-32px)] max-h-[70vh] bg-white border border-gray-200 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
       <div className="px-4 py-3 bg-gradient-to-r from-orange-500 to-red-500 text-white flex items-center justify-between">
         <div><p className="font-bold text-sm">Nhiệm vụ đang xử lý</p><p className="text-[11px] opacity-80">{tasks.length} việc cần hoàn thành</p></div>
-        <button onClick={() => setOpen(false)} className="text-white/80 hover:text-white text-lg">✕</button>
+        <button aria-label="Đóng nhiệm vụ" onClick={() => setOpen(false)} className="text-white/80 hover:text-white text-lg">✕</button>
       </div>
       <div className="flex-1 overflow-y-auto divide-y">{tasks.map(task => {
         const items = parseChecklist(task.description);

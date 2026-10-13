@@ -1,10 +1,12 @@
 import { getDb } from './db';
 import { parsePlaceRow } from './place-data';
+import { getHueClock } from './travel-clock';
 
 type Scenario = 'late' | 'rain' | 'hungry' | 'tired' | 'closed';
 type AdaptInput = {
   scenario: Scenario; dayIndex: number; activityIndex?: number; delayMinutes?: number;
   currentTime?: string; lat?: number; lng?: number;
+  completedActivityIndexes?: number[];
 };
 
 const FOOD = new Set(['food', 'cafe', 'market']);
@@ -43,6 +45,7 @@ export function adaptTrip(itinerary: any, input: AdaptInput) {
   const day = days[input.dayIndex];
   if (!day) throw new Error('Ngày cần điều chỉnh không tồn tại');
   day.activities = Array.isArray(day.activities) ? day.activities : [];
+  const completed = new Set(day.activities.filter((_: any, i: number) => input.completedActivityIndexes?.includes(i)));
 
   const db = getDb();
   const places: any[] = (db.prepare(`SELECT * FROM places WHERE publication_status = 'published' ORDER BY
@@ -50,8 +53,14 @@ export function adaptTrip(itinerary: any, input: AdaptInput) {
     popularity DESC, rating DESC`).all() as any[]).map(parsePlaceRow);
   const usedIds = new Set(days.flatMap((item: any) => item.activities || []).map((activity: any) => activity.place_id).filter(Boolean));
   const usedNames = new Set(days.flatMap((item: any) => item.activities || []).map((activity: any) => activity.name));
-  const now = toMinutes(input.currentTime || new Date().toTimeString().slice(0, 5));
+  const now = toMinutes(input.currentTime || getHueClock().time);
   const changes: string[] = [];
+  if (input.scenario === 'tired' && now + 55 > 22 * 60) {
+    return { itinerary: copy, changes: ['Đã cuối ngày; hãy nghỉ tại nơi thuận tiện. HueViVu giữ lịch hiện tại và không thêm hoạt động vượt 22:00.'] };
+  }
+  if (input.scenario === 'hungry' && now >= 20 * 60 + 30) {
+    return { itinerary: copy, changes: ['Đã quá giờ ăn tối trong lịch. Hãy tìm nơi đang mở và xác nhận với quán trước khi đi; HueViVu không chèn bữa ăn vào một giờ đã qua.'] };
+  }
 
   const nearest = (candidates: any[], anchor?: { lat?: number; lng?: number }) => candidates.sort((a, b) => {
     const aDistance = Number.isFinite(anchor?.lat) && Number.isFinite(anchor?.lng) ? distance(anchor!.lat!, anchor!.lng!, Number(a.lat), Number(a.lng)) : 0;
@@ -64,8 +73,8 @@ export function adaptTrip(itinerary: any, input: AdaptInput) {
     const kept: any[] = [];
     let shiftedCount = 0;
     for (const activity of day.activities) {
-      if (toMinutes(activity.time) < now - 20) { kept.push(activity); continue; }
-      const shifted = toMinutes(activity.time) + delay;
+      if (completed.has(activity) || toMinutes(activity.time) < now - 90) { kept.push(activity); continue; }
+      const shifted = Math.max(now, toMinutes(activity.time) + delay);
       if (shifted + durationMinutes(activity.duration) > 22 * 60) {
         changes.push(`Bỏ ${activity.name} vì vượt quá 22:00`); continue;
       }
@@ -79,24 +88,24 @@ export function adaptTrip(itinerary: any, input: AdaptInput) {
   if (input.scenario === 'rain') {
     const lookup = new Map(places.map(place => [place.id, place]));
     const indoorPool = places.filter(place => !usedIds.has(place.id) && !usedNames.has(place.name)
-      && (place.indoor || ['cafe', 'food', 'art', 'architecture', 'experience', 'market'].includes(place.category)));
+      && place.indoor);
     let replaced = 0;
     day.activities = day.activities.map((activity: any) => {
-      if (toMinutes(activity.time) < now - 20) return activity;
+      if (completed.has(activity) || toMinutes(activity.time) < now - 20) return activity;
       const source = lookup.get(activity.place_id);
       const isOutdoor = source ? (!source.indoor && (source.weather_dependent || OUTDOOR.has(source.category))) : OUTDOOR.has(activity.type);
       if (!isOutdoor || replaced >= 3) return activity;
       const replacement = nearest(indoorPool.filter(place => !usedIds.has(place.id)), { lat: activity.lat || input.lat, lng: activity.lng || input.lng });
-      if (!replacement) return { ...activity, ai_tip: `🌧️ Chưa có điểm trong nhà đã kiểm chứng để thay thế. Hãy xác nhận thời tiết trước khi đi. ${activity.ai_tip || ''}`.trim() };
+      if (!replacement) return activity;
       usedIds.add(replacement.id); replaced++;
       changes.push(`Đổi ${activity.name} → ${replacement.name}`);
-      return placeToActivity(replacement, activity.time, '🌧️ Điểm thay thế phù hợp khi mưa, được chọn từ kho dữ liệu HueViVu.');
+      return placeToActivity(replacement, activity.time, '🌧️ Địa điểm được ghi nhận có không gian trong nhà. Hãy xác nhận giờ mở cửa và chỗ che mưa với địa điểm trước khi đi.');
     });
-    if (!changes.length) changes.push('Giữ lịch hiện tại và thêm cảnh báo mưa cho các điểm ngoài trời');
+    if (!changes.length) changes.push('Chưa tìm được điểm trong nhà có đủ dữ liệu để thay thế. HueViVu giữ lịch cũ; hãy kiểm tra thời tiết và hỏi địa điểm trước khi đi.');
   }
 
   if (input.scenario === 'hungry') {
-    const upcomingFoodIndex = day.activities.findIndex((activity: any) => FOOD.has(activity.type) && toMinutes(activity.time) >= now - 15);
+    const upcomingFoodIndex = day.activities.findIndex((activity: any) => !completed.has(activity) && FOOD.has(activity.type) && toMinutes(activity.time) >= now - 15);
     const mealTime = Math.max(7 * 60, Math.min(20 * 60 + 30, now + 15));
     if (upcomingFoodIndex >= 0 && toMinutes(day.activities[upcomingFoodIndex].time) - now <= 90) {
       const meal = day.activities.splice(upcomingFoodIndex, 1)[0];
@@ -105,7 +114,7 @@ export function adaptTrip(itinerary: any, input: AdaptInput) {
     } else {
       const food = nearest(places.filter(place => FOOD.has(place.category) && !usedIds.has(place.id)), { lat: input.lat, lng: input.lng });
       if (!food) throw new Error('Chưa có quán ăn phù hợp trong kho dữ liệu');
-      day.activities = day.activities.map((activity: any) => toMinutes(activity.time) >= mealTime ? { ...activity, time: toTime(toMinutes(activity.time) + 60) } : activity);
+      day.activities = day.activities.map((activity: any) => !completed.has(activity) && toMinutes(activity.time) >= mealTime ? { ...activity, time: toTime(toMinutes(activity.time) + 60) } : activity);
       day.activities.push(placeToActivity(food, toTime(mealTime), '🍜 Được chèn vì bạn cần nghỉ và ăn ngay lúc này.'));
       changes.push(`Thêm ${food.name} lúc ${toTime(mealTime)}`);
     }
@@ -114,7 +123,7 @@ export function adaptTrip(itinerary: any, input: AdaptInput) {
   if (input.scenario === 'tired') {
     let skipNext = false; const kept: any[] = [];
     for (const activity of day.activities) {
-      if (toMinutes(activity.time) < now - 20 || FOOD.has(activity.type) || activity.type === 'rest') { kept.push(activity); continue; }
+      if (completed.has(activity) || toMinutes(activity.time) < now - 20 || FOOD.has(activity.type) || activity.type === 'rest') { kept.push(activity); continue; }
       skipNext = !skipNext;
       if (skipNext) { changes.push(`Bỏ ${activity.name} để giảm nhịp`); continue; }
       kept.push(activity);
@@ -128,9 +137,10 @@ export function adaptTrip(itinerary: any, input: AdaptInput) {
     const index = Number.isInteger(input.activityIndex) ? Number(input.activityIndex) : day.activities.findIndex((activity: any) => toMinutes(activity.time) >= now - 20);
     const closed = day.activities[index];
     if (!closed) throw new Error('Hãy chọn hoạt động đang đóng cửa');
+    if (completed.has(closed)) throw new Error('Điểm này đã được đánh dấu hoàn thành. Hãy chọn điểm chưa đi để thay thế.');
     const candidates = places.filter(place => place.category === closed.type && !usedIds.has(place.id) && !usedNames.has(place.name));
     const replacement = nearest(candidates, { lat: closed.lat || input.lat, lng: closed.lng || input.lng });
-    if (!replacement) throw new Error(`Chưa có điểm ${closed.type} thay thế đã kiểm chứng`);
+    if (!replacement) throw new Error(`Chưa có điểm cùng loại có đủ dữ liệu để thay thế. Hãy tìm và gọi xác nhận giờ mở cửa trước khi đi.`);
     day.activities[index] = placeToActivity(replacement, closed.time, `Thay cho ${closed.name} đang đóng cửa.`);
     changes.push(`Đổi ${closed.name} → ${replacement.name}`);
   }

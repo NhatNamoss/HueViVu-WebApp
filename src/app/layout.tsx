@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import 'leaflet/dist/leaflet.css';
 import { Suspense } from 'react';
 import StartupLoading from '@/components/layout/StartupLoading';
 import NavigationLoading from '@/components/layout/NavigationLoading';
+import ServiceWorkerRegistration from '@/components/layout/ServiceWorkerRegistration';
 import '@/components/layout/app-loading.css';
 
 export const metadata: Metadata = {
@@ -26,6 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body suppressHydrationWarning>
         <StartupLoading />
+        <ServiceWorkerRegistration />
         <Suspense fallback={null}><NavigationLoading /></Suspense>
         {children}
       </body>

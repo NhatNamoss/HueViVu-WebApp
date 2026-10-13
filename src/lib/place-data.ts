@@ -1,3 +1,4 @@
+import { evaluatePlaceTrust } from './place-trust';
 import { normalizePlaceCategory } from './place-taxonomy';
 import { getOpeningStatus, parseOpeningHours, weeklyHoursSummary } from './opening-hours';
 
@@ -19,12 +20,13 @@ export function parsePlaceRow(row: Record<string, any>): Record<string, any> {
   row.completeness_score = calculatePlaceCompleteness(row);
   row.quality_issues = detectPlaceIssues(row);
   row.opening_hours = parseOpeningHours(row.opening_hours, row.hours_time);
-  row.opening_status = getOpeningStatus(row.opening_hours);
+  row.data_trust = evaluatePlaceTrust(row);
+  row.opening_status = row.data_trust.operationalFresh ? getOpeningStatus(row.opening_hours) : { status: 'unknown', label: row.data_trust.label };
   row.publication_status = row.publication_status || 'published';
   row.reverify_after_days = Number(row.reverify_after_days) || 90;
   const verifiedTime = row.verified_at ? new Date(row.verified_at).getTime() : 0;
   row.days_since_verified = verifiedTime ? Math.max(0, Math.floor((Date.now() - verifiedTime) / 86_400_000)) : null;
-  row.needs_reverification = row.verification_status === 'verified' && (row.days_since_verified === null || row.days_since_verified >= row.reverify_after_days);
+  row.needs_reverification = row.data_trust.needsReverification;
   return row;
 }
 
@@ -35,8 +37,9 @@ export function detectPlaceIssues(place: Record<string, any>) {
   if (/(cà phê|cafe|coffee)/.test(name) && category !== 'cafe') issues.push('Tên giống quán cà phê nhưng danh mục khác');
   if (/(nhà hàng|quán ăn|bún|bánh|cơm|chè)/.test(name) && !['food', 'market'].includes(category || '')) issues.push('Tên giống điểm ẩm thực nhưng danh mục khác');
   if (/chùa/.test(name) && category !== 'temple') issues.push('Tên giống chùa nhưng danh mục khác');
-  if (place.verification_status === 'verified' && (!place.source_url || !place.verified_by)) issues.push('Đã xác minh nhưng thiếu nguồn/người kiểm chứng');
-  if (place.verified_at && Date.now() - new Date(place.verified_at).getTime() > 1000 * 60 * 60 * 24 * 90) issues.push('Nguồn đã quá 90 ngày');
+  const trust = evaluatePlaceTrust(place);
+  if (place.verification_status === 'verified' && trust.gaps.length) issues.push('Cần bổ sung: ' + trust.gaps.join(', '));
+  if (trust.status === 'stale') issues.push('Giờ/giá/liên hệ đã đến hạn kiểm tra lại');
   return issues;
 }
 
@@ -50,7 +53,7 @@ export function calculatePlaceCompleteness(place: Record<string, any>) {
     Boolean(place.img?.trim()),
     Boolean(place.hours?.trim() || place.hours_time?.trim() || weeklyHoursSummary(parseOpeningHours(place.opening_hours))),
     Boolean(place.source_name?.trim()),
-    Boolean(place.source_url?.trim()),
+    Boolean(place.source_url?.trim() || place.verification_notes?.trim()),
     Boolean(place.verified_by?.trim()),
     Boolean((place.highlights || []).length),
     Boolean((place.tips || []).length),
@@ -80,7 +83,7 @@ export function preparePlacePayload(data: Record<string, any>) {
   return {
     name: data.name.trim(), category,
     description: data.description?.trim() || '', address: data.address?.trim() || '',
-    price: data.price?.trim() || 'Miễn phí', lat, lng,
+    price: data.price?.trim() || 'Chưa có thông tin', lat, lng,
     img: data.img?.trim() || '/assets/citadel.png', ai_insight: data.ai_insight?.trim() || '',
     rating: Math.min(5, Math.max(1, Number(data.rating) || 4.5)),
     popularity: Math.min(1, Math.max(0, Number(data.popularity) || 0.5)),

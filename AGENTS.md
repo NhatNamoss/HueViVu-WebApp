@@ -1,43 +1,55 @@
-# HueViVu product and UX principles
+# HueViVu Agent Instructions
 
-These instructions apply to every feature and interface change in this repository.
+## Mandatory implementation loop
 
-## Design for a first-time traveler
+After every completed implementation task, the agent MUST:
+1. Run relevant automated tests/type-check/build.
+2. Start the HueViVu app locally using the project's existing development command.
+3. Open the running app in a browser and inspect the actual UI.
+4. Exercise the changed user flow manually/runtime-test it.
+5. Check browser/runtime errors and obvious console/network failures.
+6. If a UI/runtime issue is found, fix it and repeat the verification loop.
+7. Only after visual/runtime verification may the task be marked complete in docs/PRODUCTION_TRACKER.html.
+8. Never tick a tracker task merely because code was written or compilation passed.
 
-- Never assume users understand itinerary algorithms, AI, feasibility scores, taxonomy, or internal app structure.
-- Every feature must make five things clear in natural Vietnamese: what it is, why it matters, when to use it, what happens after tapping, and what the user should do next.
-- Translate system findings into real travel consequences: being late, rushing, missing a meal, arriving after closing, walking too far, or not having enough rest.
-- Do not show a score without explaining the reasons and offering a useful next action.
-- A tap must produce visible feedback. Never open or highlight an item silently and expect the user to infer how to edit it.
-- Prefer one clear automatic remedy with preview and undo/cancel over asking users to manually repair several technical fields.
-- Before applying material itinerary changes, show a plain-language before/after preview and request a simple confirmation.
+## UI verification rule
 
-## Interaction hierarchy
+For frontend changes, visual verification is mandatory. Prefer computer-use for end-to-end browser interaction and manage-long-running-process for a persistent dev server. Use debug-runtime-issue when the app runs but behavior is broken.
 
-1. State the user's real-world problem.
-2. Explain why it affects their trip.
-3. Recommend one primary action.
-4. Let HueViVu prepare the solution.
-5. Preview concrete changes.
-6. Apply only after the user chooses to proceed.
-7. Confirm the outcome and show the new state.
+For API/backend-only changes, still run the app and exercise the affected API/user flow where practical.
 
-## Retention standard
+## Production quality gate
 
-- Retention is built from every small interaction. Empty, loading, error, permission, success, and recovery states are product experiences, not implementation details.
-- Avoid developer language in customer-facing UI.
-- Use progressive disclosure: show the conclusion and action first; details remain available for users who want them.
-- Test every important flow from the perspective of someone who installed HueViVu today and knows nothing about the product.
-- A feature is incomplete until its discovery, explanation, action, feedback, failure recovery, and post-action state are all designed and tested.
+A task is not done until code compiles/type-checks, automated checks pass, the app starts, the changed flow is exercised, the UI is visually inspected when applicable, runtime errors are investigated, and the tracker is updated only after all gates pass.
 
-## Efficient investigation and verification
+## Preferred skill stack
 
-- Start with `docs/PROJECT_MAP.md` when locating unfamiliar functionality. Read only the relevant source and its direct dependencies; do not load the whole repository or historical reports by default.
-- Convert the request into a concrete outcome, affected user flow, constraints, and completion checks internally. Preserve the user's product intent; do not spend a separate model turn rewriting an already clear request.
-- Use `docs/TASK_ROUTING.md` to assess scope. Reasoning recommendations do not change the active model automatically.
-- Use `docs/TESTING.md` to choose proportionate verification. Repeat a check only after a relevant edit, failure, or newly discovered concern.
-- Prefer bounded `rg` searches and source excerpts. Summarize successful command output; retain complete failure logs when needed to diagnose.
-- If RTK is available, use `rtk git status`, `rtk git diff`, and `rtk err <command>` for noisy output. Use raw output for exact source edits, checksums, SQL errors, permission checks, and details hidden by compression.
-- On this Windows installation, RTK may require a fresh terminal/app restart before `rtk` resolves from PATH. See `docs/TOKEN_OPTIMIZATION.md` for the verified fallback executable path.
-- Do not reduce UX completeness, authorization checks, test coverage for risky changes, or correctness to save tokens.
-- Keep final handoffs concise: behavior changed, relevant verification, and unresolved limitations. Avoid repeating a full feature inventory.
+1. implement-project-change — inspect, focused edit, verify, diff.
+2. manage-long-running-process — persistent dev server for UI/runtime checks.
+3. computer-use — browser navigation, clicks, visual inspection.
+4. debug-runtime-issue — runtime/interaction diagnosis and fixes.
+5. review-code-changes — regression/security/coverage review for larger features.
+6. codex-token-optimizer — reduce context/output waste for large logs.
+
+Use delegate-coding-task only for genuinely independent non-overlapping work. Do not delegate tightly coupled work just to parallelize.
+
+## Workflow efficiency
+
+- Read the smallest relevant code scope first.
+- Reuse existing APIs, components, validators and adaptation logic.
+- Prefer deterministic, testable business logic over UI-only logic.
+- Use targeted searches and bounded command output.
+- Inspect git diff and git status before finishing.
+- Never commit unless explicitly requested.
+- Update docs/PRODUCTION_TRACKER.html only after actual completion and verification.
+
+## Product principle
+
+HueViVu is an AI travel companion for Huế. Prioritize real traveler problems: context -> decision -> useful action.
+
+Progressively combine location + time + weather + itinerary + preferences + opening status + travel state into actionable recommendations.
+
+## Current production documents
+
+- docs/PRODUCTION_MASTER_BLUEPRINT.md — production roadmap and gates.
+- docs/PRODUCTION_TRACKER.html — living implementation checklist.

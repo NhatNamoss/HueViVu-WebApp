@@ -64,6 +64,27 @@ function createSchema(db: Database.Database) {
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
 
+    CREATE TABLE IF NOT EXISTS trip_state (
+      trip_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      day_index INTEGER DEFAULT 0,
+      current_activity_index INTEGER,
+      completed_activity_indexes TEXT DEFAULT '[]',
+      visited_place_ids TEXT DEFAULT '[]',
+      last_lat REAL,
+      last_lng REAL,
+      last_location_accuracy REAL,
+      fatigue TEXT DEFAULT 'fresh',
+      travel_mode TEXT DEFAULT 'unknown',
+      last_weather TEXT,
+      started_at TEXT,
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_trip_state_user ON trip_state(user_id, updated_at);
+
     CREATE TABLE IF NOT EXISTS places (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -243,8 +264,10 @@ function createSchema(db: Database.Database) {
   `);
 
   addColumnIfMissing(db, 'training_examples', 'image_url', 'TEXT');
+  addColumnIfMissing(db, 'trip_state', 'day_progress', "TEXT DEFAULT '{}'");
   addColumnIfMissing(db, 'users', 'is_guest', 'INTEGER DEFAULT 0');
   addColumnIfMissing(db, 'users', 'role', "TEXT DEFAULT 'user'");
+  addColumnIfMissing(db, 'users', 'preferences', "TEXT DEFAULT '{}'");
 
   addColumnIfMissing(db, 'places', 'indoor',         'INTEGER DEFAULT 0');
   addColumnIfMissing(db, 'places', 'best_time',      "TEXT DEFAULT 'all'");

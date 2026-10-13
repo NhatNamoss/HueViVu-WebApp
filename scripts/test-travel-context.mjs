@@ -1,0 +1,82 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const ts = require('typescript');
+const modules = new Map();
+const indoorPlace = { id: 'indoor', name: 'Không gian trong nhà', category: 'experience', indoor: true, lat: 16.46, lng: 107.59, popularity: .2 };
+const outdoorCafe = { id: 'outdoor', name: 'Cà phê sân vườn', category: 'cafe', indoor: false, lat: 16.46, lng: 107.59, popularity: 1 };
+function load(relative) {
+  const file = path.resolve(relative);
+  if (modules.has(file)) return modules.get(file).exports;
+  const module = { exports: {} }; modules.set(file, module);
+  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+  const localRequire = request => {
+    if (request === './db') return { getDb: () => ({ prepare: () => ({ all: () => [indoorPlace, outdoorCafe] }) }) };
+    if (request === './place-data') return { parsePlaceRow: value => value };
+    return request.startsWith('.') ? load(path.resolve(path.dirname(file), request + '.ts')) : require(request);
+  };
+  vm.runInThisContext('(function(require,module,exports){' + code + '\n})', { filename: file })(localRequire, module, module.exports);
+  return module.exports;
+}
+const clock = load('src/lib/travel-clock.ts');
+const detector = load('src/lib/dynamic-replanning.ts');
+const context = load('src/lib/travel-context.ts');
+const progress = load('src/lib/trip-state.ts');
+const adapter = load('src/lib/trip-adapter.ts');
+const midnight = new Date('2026-10-08T17:15:00Z');
+assert.equal(clock.getHueClock(midnight).time, '00:15');
+assert.equal(clock.getHueClock(midnight).date, '2026-10-09');
+assert.equal(clock.tripDayIndex('2026-10-08', midnight), 1);
+assert.equal(clock.tripDayIndex('2026-10-10', midnight), -1);
+assert.equal(clock.tripDayIndex('2026-02-30', midnight), null);
+assert.equal(clock.scheduledMinutes('25:00'), null);
+const now = new Date('2026-10-08T02:30:00Z');
+const base = { now, startDate: '2026-10-08', duration: 2, dayIndex: 0, status: 'active', startedAt: '2026-10-08T01:00:00Z', activities: [{ time: '09:00', type: 'heritage' }, { time: '10:30', type: 'cafe', indoor: true }] };
+assert.equal(detector.detectReplanNeed({ ...base, startDate: '2026-10-09', weather: { condition: 'rainy' } }).scenario, null);
+assert.equal(detector.detectReplanNeed({ ...base, startDate: '2026-10-05' }).scenario, null);
+assert.equal(detector.detectReplanNeed({ ...base, status: 'past' }).scenario, null);
+assert.equal(detector.detectReplanNeed({ ...base, startedAt: null }).scenario, null);
+assert.equal(detector.detectReplanNeed({ ...base, dayIndex: 1 }).scenario, null);
+assert.equal(detector.detectReplanNeed({ ...base, weather: { condition: 'rainy' } }).scenario, 'rain');
+assert.equal(detector.detectReplanNeed(base).scenario, 'late');
+assert.equal(detector.detectReplanNeed({ ...base, completedActivityIndexes: [0], weather: { condition: 'rainy' } }).scenario, null);
+assert.equal(detector.detectReplanNeed({ ...base, completedActivityIndexes: [0, 1], fatigue: 'tired', weather: { condition: 'rainy' } }).scenario, null);
+assert.equal(detector.detectReplanNeed({ ...base, completedActivityIndexes: [0], fatigue: 'tired' }).scenario, 'tired');
+assert.equal(detector.detectReplanNeed({ ...base, now: new Date('2026-10-08T16:00:00Z'), fatigue: 'tired' }).scenario, null);
+assert.equal(context.buildTravelContext({ now: midnight }).hour, 0);
+assert.equal(context.buildTravelContext({ now, trip: { id: 't', status: 'active', startDate: '2026-10-09', duration: 2 } }).tripActive, false);
+assert.equal(context.isTravelTripActive({ id: 't', status: 'active', startDate: '2026-10-08', duration: 2 }, now), false);
+assert.equal(context.isTravelTripActive({ id: 't', status: 'active', startDate: '2026-10-08', duration: 2, startedAt: '2026-10-08T01:00:00Z' }, now), true);
+assert.equal(context.buildTravelContext({ now, trip: { id: 't', status: 'active', startDate: '2026-10-08', duration: 2, startedAt: '2026-10-08T01:00:00Z', fatigue: 'tired' }, weather: { condition: 'rainy' } }).nextAction.id, 'take-a-break');
+assert.equal(context.buildTravelContext({ now: new Date('2026-10-08T14:30:00Z'), weather: { condition: 'rainy' } }).nextAction.id, 'late-rest');
+assert.equal(context.buildTravelContext({ now: new Date('2026-10-08T14:30:00Z'), trip: { id: 't', status: 'active', startDate: '2026-10-08', duration: 2, startedAt: '2026-10-08T01:00:00Z', fatigue: 'tired' }, weather: { condition: 'rainy' } }).nextAction.id, 'take-a-break');
+assert.equal(context.buildTravelContext({ now, trip: { id: 't', status: 'active', startDate: '2026-10-08', duration: 2 }, weather: { condition: 'rainy' } }).nextAction.ctaHref, '/explore?indoor=true');
+const activities = [{ name: 'Đã đi', time: '09:40', type: 'heritage', location: 'Huế' }, { name: 'Bữa trưa', time: '10:20', type: 'food', location: 'Huế' }, { name: 'Chưa đi', time: '11:30', type: 'heritage', location: 'Huế' }];
+const legacy = progress.normalizeTripState({ day_index: 0, completed_activity_indexes: '[0]', current_activity_index: 1 }, 't', [{ activities }]);
+const secondDay = { ...legacy, dayIndex: 1, completedActivityIndexes: [1], currentActivityIndex: null };
+const dayProgress = progress.recordDayProgress(secondDay, activities);
+const reloaded = progress.normalizeTripState({ day_index: 1, day_progress: JSON.stringify(dayProgress) }, 't', [{ activities }, { activities }]);
+assert.deepEqual(progress.getDayProgress(reloaded, 0, activities).completedActivityIndexes, [0]);
+assert.deepEqual(progress.getDayProgress(reloaded, 1, activities).completedActivityIndexes, [1]);
+assert.deepEqual(progress.getDayProgress(reloaded, 0, [activities[2], activities[1], activities[0]]).completedActivityIndexes, [2]);
+assert.deepEqual(progress.getDayProgress(reloaded, 0, [activities[2], activities[1]]).completedActivityIndexes, []);
+for (const scenario of ['late', 'rain', 'tired', 'hungry']) {
+  const result = adapter.adaptTrip({ days: [{ activities }] }, { scenario, dayIndex: 0, currentTime: '09:00', delayMinutes: 45, completedActivityIndexes: [0] });
+  assert.deepEqual(result.itinerary.days[0].activities.find(activity => activity.name === 'Đã đi'), activities[0], scenario + ' changed a completed activity');
+  if (scenario === 'rain') {
+    assert.ok(result.itinerary.days[0].activities.some(activity => activity.name === indoorPlace.name));
+    assert.ok(!result.itinerary.days[0].activities.some(activity => activity.name === outdoorCafe.name));
+  }
+}
+assert.throws(() => adapter.adaptTrip({ days: [{ activities }] }, { scenario: 'closed', dayIndex: 0, activityIndex: 0, completedActivityIndexes: [0] }), /hoàn thành/);
+assert.throws(() => adapter.adaptTrip({ days: [{ activities }] }, { scenario: 'closed', dayIndex: 0, activityIndex: 0 }), /Chưa có điểm cùng loại/);
+assert.deepEqual(adapter.adaptTrip({ days: [{ activities }] }, { scenario: 'tired', dayIndex: 0, currentTime: '21:30' }).itinerary.days[0].activities, activities);
+assert.deepEqual(adapter.adaptTrip({ days: [{ activities }] }, { scenario: 'hungry', dayIndex: 0, currentTime: '21:30' }).itinerary.days[0].activities, activities);
+const noIndoor = adapter.adaptTrip({ days: [{ activities: [{ ...activities[0], place_id: indoorPlace.id }, activities[2]] }] }, { scenario: 'rain', dayIndex: 0, currentTime: '09:00' });
+assert.deepEqual(noIndoor.itinerary.days[0].activities, [{ ...activities[0], place_id: indoorPlace.id }, activities[2]]);
+assert.ok(noIndoor.changes[0].includes('Chưa tìm được điểm trong nhà'));
+assert.deepEqual(activities.map(activity => activity.time), ['09:40', '10:20', '11:30']);
+console.log('PASS travel context: Hue timezone, trip eligibility, completion/fatigue, daily progress, indoor evidence and protected adaptation');

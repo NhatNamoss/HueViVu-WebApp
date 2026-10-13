@@ -1,9 +1,13 @@
-﻿'use client';
+'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import PlaceCard from '@/components/ui/PlaceCard';
 import CategoryFilter from '@/components/ui/CategoryFilter';
 import LoadingState from '@/components/ui/LoadingState';
+import { buildTravelContext, isTravelTripActive, type TravelContext } from '@/lib/travel-context';
+import { getHueClock } from '@/lib/travel-clock';
+import WeatherWidget from '@/components/ui/WeatherWidget';
+import { isWeatherUsable, unavailableWeather, type HueWeather } from '@/lib/hue-weather';
 
 type Place = {
   id: string; name: string; category: string;
@@ -11,68 +15,7 @@ type Place = {
   vibe?: string; vibeClass?: string;
 };
 
-type Weather = {
-  temp: number; condition_vi: string; condition_emoji: string;
-};
-
-// ─── Contextual messages by time of day + weather ───────────────
-const getContextualHero = (hour: number, weather?: Weather | null) => {
-  const isRaining = weather?.condition_vi?.toLowerCase().includes('mưa');
-
-  if (isRaining) {
-    return {
-      eyebrow: 'Trời đang mưa',
-      headline: 'Mưa Huế buồn mà đẹp...',
-      sub: 'Một tô bún bò nóng hay một quán cà phê nghe nhạc Trịnh?',
-      mood: '☔',
-      cta: 'Gợi ý trong nhà',
-      ctaHref: '/explore?cat=cafe',
-      bg: 'linear-gradient(135deg, rgba(100,120,180,0.08), rgba(80,100,160,0.05))',
-    };
-  }
-  if (hour >= 5 && hour < 10) {
-    return {
-      eyebrow: 'Sáng sớm yên bình',
-      headline: 'Ánh sáng vàng đổ qua Đại Nội...',
-      sub: 'Lúc này ít người nhất trong ngày. Bắt đầu hành trình từ đâu nhé?',
-      mood: '🌅',
-      cta: 'Địa điểm sáng sớm',
-      ctaHref: '/explore?time=morning',
-      bg: 'linear-gradient(135deg, rgba(255,180,100,0.1), rgba(255,127,107,0.07))',
-    };
-  }
-  if (hour >= 10 && hour < 14) {
-    return {
-      eyebrow: 'Nắng ban mai',
-      headline: 'Huế đang ở khoảnh khắc đẹp nhất...',
-      sub: 'Thời điểm lý tưởng cho những di tích và ẩm thực trưa chuẩn vị cố đô.',
-      mood: '🌞',
-      cta: 'Ăn trưa ở đâu?',
-      ctaHref: '/explore?cat=food',
-      bg: 'linear-gradient(135deg, rgba(255,200,80,0.1), rgba(255,154,92,0.07))',
-    };
-  }
-  if (hour >= 14 && hour < 18) {
-    return {
-      eyebrow: 'Chiều chậm rãi',
-      headline: 'Hoàng hôn trên sông Hương đang đến...',
-      sub: 'Một buổi chiều thư thả — cà phê, sách, hay dạo bộ bờ sông?',
-      mood: '🌇',
-      cta: 'Chiều nay đi đâu',
-      ctaHref: '/explore?time=afternoon',
-      bg: 'linear-gradient(135deg, rgba(255,127,107,0.1), rgba(200,100,80,0.06))',
-    };
-  }
-  return {
-    eyebrow: 'Đêm xuống rồi',
-    headline: 'Huế về đêm có một vẻ riêng...',
-    sub: 'Đèn lồng soi bóng sông Hương. Đêm nay muốn làm gì?',
-    mood: '🌙',
-    cta: 'Khám phá đêm Huế',
-    ctaHref: '/explore?time=evening',
-    bg: 'linear-gradient(135deg, rgba(91,50,86,0.1), rgba(50,30,70,0.07))',
-  };
-};
+type Weather = HueWeather;
 
 // ─── Day rhythm suggestions ──────────────────────────────────────
 const dayRhythm = [
@@ -97,17 +40,21 @@ export default function HomePage() {
   const [placesLoading, setPlacesLoading] = useState(true);
   const [placesError, setPlacesError] = useState('');
   const [retry, setRetry] = useState(0);
+  const [weatherRetry, setWeatherRetry] = useState(0);
   const [weather, setWeather] = useState<Weather | null>(null);
+  const [serverContext, setServerContext] = useState<TravelContext | null>(null);
+  const [companionLocation, setCompanionLocation] = useState<{ lat: number; lng: number; at: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [contextNotice, setContextNotice] = useState('');
   const [activeTrip, setActiveTrip] = useState<any>(null);
   const [activeCategory, setActiveCategory] = useState('all');
-  const [hour, setHour] = useState(new Date().getHours());
+  const [hour, setHour] = useState(getHueClock().hour);
   const [mounted, setMounted] = useState(false);
   const [userInitial, setUserInitial] = useState('H');
 
   useEffect(() => {
     setMounted(true);
-    setHour(new Date().getHours());
-    fetch('/api/weather').then(r => r.json()).then(data => setWeather(data._fallback ? null : data)).catch(() => {});
+    setHour(getHueClock().hour);
 
     const token = localStorage.getItem('hv_token');
     if (token) {
@@ -115,7 +62,7 @@ export default function HomePage() {
         .then(r => r.json()).then(u => { if (u.name) setUserInitial(u.name[0].toUpperCase()); }).catch(() => {});
       fetch('/api/trips', { headers: { Authorization: `Bearer ${token}` } })
         .then(r => r.json()).then((trips: any[]) => {
-          const active = trips.find(t => t.status === 'active');
+          const active = Array.isArray(trips) ? trips.find(t => isTravelTripActive({ id: t.id, status: t.status, startDate: t.start_date, duration: t.duration, startedAt: t.started_at })) : null;
           if (active) setActiveTrip(active);
         }).catch(() => {});
     }
@@ -132,8 +79,32 @@ export default function HomePage() {
     return () => controller.abort();
   }, [retry]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      const token = localStorage.getItem('hv_token');
+      try {
+        const useLocation = companionLocation && Date.now() - companionLocation.at < 300000;
+        const response = await fetch('/api/companion', { method: useLocation ? 'POST' : 'GET', headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(useLocation ? { 'Content-Type': 'application/json' } : {}) }, ...(useLocation ? { body: JSON.stringify({ lat: companionLocation.lat, lng: companionLocation.lng }) } : {}), signal: AbortSignal.timeout(15000) });
+        if (!response.ok) throw new Error();
+        const data = await response.json();
+        if (!cancelled) { setServerContext(data.context); setContextNotice(''); setWeather(data.weather || unavailableWeather()); }
+      } catch { if (!cancelled) { setServerContext(null); setWeather(unavailableWeather()); setContextNotice('Chưa cập nhật được gợi ý. Đang dùng thông tin cơ bản.'); } }
+    };
+    refresh(); const interval = window.setInterval(refresh, 60000);
+    const focus = () => { refresh(); }; window.addEventListener('focus', focus);
+    return () => { cancelled = true; clearInterval(interval); window.removeEventListener('focus', focus); };
+  }, [companionLocation, weatherRetry]);
+
+  const findNearby = () => {
+    if (!navigator.geolocation) { setContextNotice('Thiết bị chưa hỗ trợ vị trí. Bạn vẫn có thể xem gợi ý.'); return; }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(position => { setCompanionLocation({ lat: position.coords.latitude, lng: position.coords.longitude, at: Date.now() }); setLocating(false); }, () => { setContextNotice('Chưa có quyền vị trí. Gợi ý vẫn dựa trên giờ, thời tiết và sở thích.'); setLocating(false); }, { timeout: 8000, maximumAge: 60000 });
+  };
+
   const filtered = activeCategory === 'all' ? places : places.filter(p => p.category === activeCategory);
-  const hero = getContextualHero(hour, weather);
+  const travelContext = serverContext || buildTravelContext({ now: new Date(), weather: isWeatherUsable(weather) ? { condition: weather.condition, temp: weather.temp } : null, trip: activeTrip ? { id: String(activeTrip.id), status: activeTrip.status, startDate: activeTrip.start_date, duration: activeTrip.duration, startedAt: activeTrip.started_at, fatigue: activeTrip.fatigue } : null });
+  const hero = travelContext.nextAction;
 
   return (
     <>
@@ -162,7 +133,7 @@ export default function HomePage() {
           </h1>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          {weather && (
+          {isWeatherUsable(weather) && (
             <div style={{
               display: 'flex', alignItems: 'center', gap: 5,
               background: 'var(--card-bg)', padding: '7px 13px',
@@ -184,6 +155,8 @@ export default function HomePage() {
           }}>{userInitial}</Link>
         </div>
       </header>
+
+      <WeatherWidget weather={weather} onRetry={() => setWeatherRetry(n => n + 1)} style={{ margin: '12px 20px 0' }} />
 
       {/* ── Contextual Hero ───────────────────────────────── */}
       <section className="section" style={{ marginTop: 20 }}>
@@ -290,13 +263,12 @@ export default function HomePage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
               <p style={{ fontSize: '0.6875rem', fontWeight: 700, color: 'var(--coral)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>HueViVu gợi ý</p>
               <span style={{ fontSize: '0.6875rem', color: 'var(--gray-soft)', background: 'rgba(26,29,59,0.05)', padding: '2px 8px', borderRadius: 'var(--radius-full)' }}>
-                theo thời tiết & giờ hiện tại
+                Giải thích đề xuất ở trên
               </span>
             </div>
-            <p style={{ fontSize: '0.9375rem', color: 'var(--navy)', lineHeight: 1.55, fontWeight: 500 }}>
-              {weather?.condition_vi === 'Nắng đẹp' || weather?.condition_vi === 'Trời nắng'
-                ? '"Trời nắng đẹp hôm nay — lý tưởng để ghé Chùa Thiên Mụ lúc sáng sớm, ít người và ánh sáng vàng rực để chụp ảnh."'
-                : '"Hôm nay thích hợp khám phá ẩm thực trong nhà — thử Bún bò Bà Tuyết hoặc Bánh bèo hẻm Quan đi!"'}
+            <button onClick={findNearby} disabled={locating} style={{ border: 'none', background: 'none', color: 'var(--coral)', fontSize: '.75rem', cursor: 'pointer', padding: '4px 0' }}>{locating ? 'Đang tìm vị trí…' : '📍 Gợi ý gần tôi'}</button>
+            <p role="status" style={{ fontSize: '0.875rem', color: 'var(--navy-muted)', lineHeight: 1.55, fontWeight: 500 }}>
+{contextNotice || hero.reason}
             </p>
           </div>
         </div>

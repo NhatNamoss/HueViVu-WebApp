@@ -2,6 +2,7 @@ import { getDb } from './db';
 import { normalizePlaceCategory } from './place-taxonomy';
 import { bangkokNow, isOpenAt, parseOpeningHours } from './opening-hours';
 import { estimateTravelMinutes } from './travel-time';
+import { plannerIndoorBonus } from './travel-preferences';
 const START_H = 7;
 const BUDGET = 840; // 14h: 07:00→21:00
 const MAX_H = 2; // max heritage/day
@@ -91,9 +92,9 @@ function sc(p:any,n:Nd,arr:number,tt:number):number{
   return s;
 }
 
-export function generateAstarTrip({duration,styles,companion,budget,startLat,startLng,startDate,pacing='balanced',visitedPlaceIds=[],avoidPlaceIds=[]}:{
+export function generateAstarTrip({duration,styles,companion,budget,startLat,startLng,startDate,pacing='balanced',indoorPreferred=false,visitedPlaceIds=[],avoidPlaceIds=[]}:{
   duration:number;styles:string|string[];companion:string;budget:number;food?:string[];startLat?:number;startLng?:number;
-  startDate?:string;pacing?:string;
+  startDate?:string;pacing?:string;indoorPreferred?:boolean;
   visitedPlaceIds?:string[];avoidPlaceIds?:string[];
 }){
   const db=getDb();
@@ -117,6 +118,7 @@ export function generateAstarTrip({duration,styles,companion,budget,startLat,sta
     if(['food','cafe','market'].includes(p.category))p.avg_visit_min=Math.min(p.avg_visit_min,60);
     p.meal_type=p.meal_type||(FC.has(p.category)?'any':null);
     p.indoor=Number(p.indoor)||0;
+    p.base_score+=plannerIndoorBonus(p,indoorPreferred);
     p.lat=Number(p.lat);p.lng=Number(p.lng);
   });
   const dur=Math.min(7,Math.max(1,parseInt(String(duration),10)||2));
@@ -190,6 +192,7 @@ export function generateAstarTrip({duration,styles,companion,budget,startLat,sta
   const titleThemes=Array.from(new Set(sArr.filter(style=>allP.some(place=>place.category===style)).map(style=>STYLE_LABELS[style]).filter(Boolean))).slice(0,2);
   const tripTitle=`Huế ${dur} ngày · ${titleThemes.length ? titleThemes.join(' & ') : (days[0]?.theme || 'Khám phá Cố đô')}`;
   return{
+    planning_preferences: { styles: [...rawStyles], pacing, indoorPreferred },
     title:tripTitle,
     summary:`Lịch trình ${dur} ngày cho ${CL[companion]||companion} — nhịp ngày thực tế: ăn sáng → di tích → nghỉ trưa → khám phá chiều → ẩm thực tối. Tối đa ${MAX_H} di tích/ngày.`,
     total_cost_estimate:budget?`${Number(budget).toLocaleString('vi-VN')} VNĐ`:'Dự kiến 2.000.000 VNĐ',

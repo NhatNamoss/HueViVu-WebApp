@@ -1445,3 +1445,64 @@ a { text-decoration: none; color: inherit; }
 }
 
 
+.planner-finish { display:flex; flex-direction:column; gap:14px; max-width:640px; margin:0 auto; padding:18px; border:1px solid rgba(26,29,59,.07); border-radius:24px; background:white; box-shadow:0 8px 28px rgba(26,29,59,.04); }
+.planner-finish-heading, .trip-progress-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.planner-finish-heading h2, .trip-progress-heading h2 { margin:0; color:var(--navy); font-size:.95rem; font-weight:750; }
+.planner-finish-heading > span, .trip-progress-heading > span { color:var(--navy-muted); font-size:.75rem; white-space:nowrap; }
+.planner-indoor { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px; border-radius:12px; background:var(--soft-white); color:var(--navy); font-size:.82rem; font-weight:600; }
+.planner-indoor input { width:18px; height:18px; accent-color:var(--coral); }
+.quiet-details { color:var(--navy-muted); font-size:.76rem; line-height:1.6; }
+.quiet-details summary { cursor:pointer; padding:8px 0; font-weight:600; }
+.quiet-details p { margin:4px 0 10px; }
+.quiet-details a { color:var(--coral); }
+.trip-notes { margin:0 20px 8px; }
+.trip-progress-bar { display:block; width:100%; height:5px; margin:10px 0 4px; border:0; border-radius:999px; overflow:hidden; accent-color:var(--coral); }
+.trip-progress-bar::-webkit-progress-bar { background:rgba(26,29,59,.06); }
+.trip-progress-bar::-webkit-progress-value { background:linear-gradient(90deg,var(--coral),var(--warm-orange)); border-radius:999px; }
+.chat-question-picker { padding:10px 12px 0; border-top:1px solid rgba(26,29,59,.06); }
+.chat-question-picker label { display:block; margin-bottom:5px; font-size:.7rem; font-weight:700; color:var(--navy-muted); }
+.chat-question-picker select { width:100%; min-height:40px; padding:8px 10px; border:1px solid rgba(255,127,107,.24); border-radius:12px; background:var(--soft-white); color:var(--navy); font-family:var(--font); font-size:.8rem; }
+.chat-question-picker select:focus-visible, .quiet-details summary:focus-visible { outline:2px solid var(--coral); outline-offset:3px; }
+@media (max-width:400px) { .planner-finish { padding:14px; } }
+
+.trip-page-shell { width:100%; max-width:720px; margin:0 auto; }
+
+.trip-page-shell .trip-compact-control {
+  position: relative;
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: .78rem;
+  line-height: 1.35;
+  border-radius: 10px;
+  cursor: pointer;
+  overflow: visible;
+}
+/* The visible control is smaller; its vertical touch area remains at least 44px. */
+.trip-page-shell .trip-compact-control::before {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+.trip-page-shell .trip-compact-control:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 3px;
+}
+.trip-weather-impact .btn-primary { box-shadow: none; }
+.trip-page-shell .trip-notes { margin-bottom: 4px; }
+.trip-page-shell .trip-notes summary { padding: 4px 0; }
+.trip-weather-compact summary { position: relative; }
+.trip-weather-compact summary::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  height: 44px;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+}
+.trip-weather-compact summary:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 2px;
+}
+.trip-page-shell [aria-label="Ngày trong hành trình"] .trip-compact-control { min-height:44px; }
+.trip-weather-compact:has(button) summary::before { content:none; }

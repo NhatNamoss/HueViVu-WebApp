@@ -1,3 +1,5 @@
+import { validateTripChange } from '@/lib/trip-change-guard';
+import { groundedPlaceReply } from '@/lib/grounded-place-reply';
 import { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
 import { getAuthUserId } from '@/lib/auth';
@@ -5,12 +7,14 @@ import { chat } from '@/lib/ai';
 import { customizeTrip } from '@/lib/ai';
 import { v4 as uuidv4 } from 'uuid';
 import { suggestTripInsertion } from '@/lib/trip-insertion';
+import { normalizeTripState } from '@/lib/trip-state';
+import { progressReply } from '@/lib/trip-chat-progress';
 
 function fold(value = '') {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd').toLowerCase();
 }
 
-function deterministicProposal(message: string, trip: any, db: any) {
+function deterministicProposal(message: string, trip: any, db: any, viewedDay = 0) {
   const candidate = JSON.parse(JSON.stringify({
     title: trip.title, summary: trip.summary, total_cost_estimate: trip.total_cost_estimate,
     highlights: trip.highlights || [], ai_insight: trip.ai_insight || '',
@@ -18,7 +22,7 @@ function deterministicProposal(message: string, trip: any, db: any) {
   }));
   const text = fold(message);
   const dayMatch = text.match(/ngay\s+(\d+)/);
-  const dayIndex = Math.max(0, Math.min(candidate.days.length - 1, Number(dayMatch?.[1] || 1) - 1));
+  const dayIndex = Math.max(0, Math.min(candidate.days.length - 1, Number(dayMatch?.[1] || viewedDay + 1) - 1));
   const day = candidate.days[dayIndex];
   if (!day) return null;
   const times = Array.from(message.matchAll(/\b([01]?\d|2[0-3]):[0-5]\d\b/g)).map(match => match[0].padStart(5, '0'));
@@ -43,7 +47,7 @@ function deterministicProposal(message: string, trip: any, db: any) {
   }
 
   if (/\b(them|chen)\b/.test(text)) {
-    const allPlaces = db.prepare('SELECT * FROM places ORDER BY popularity DESC, rating DESC').all() as any[];
+    const allPlaces = db.prepare("SELECT * FROM places WHERE publication_status = 'published' ORDER BY popularity DESC, rating DESC").all() as any[];
     const existingIds = new Set(candidate.days.flatMap((item: any) => item.activities || []).map((item: any) => item.place_id));
     const exact = allPlaces.filter(place => text.includes(fold(place.name))).sort((a, b) => b.name.length - a.name.length)[0];
     const category = text.includes('ca phe') ? 'cafe' : text.includes('quan an') || text.includes('an uong') || text.includes('mon an') ? 'food' : null;
@@ -89,20 +93,25 @@ function summarizeChanges(before: any, after: any) {
 // POST /api/chat
 export async function POST(req: NextRequest) {
   try {
-    const { message, tripId, history = [] } = await req.json();
-    if (!message) return Response.json({ error: 'Tin nhắn không được để trống' }, { status: 400 });
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return Response.json({ error: 'Tin nhắn chưa hợp lệ.' }, { status: 400 });
+    const { message, tripId, history = [], dayIndex } = body;
+    if (typeof message !== 'string' || !message.trim() || message.length > 2000 || (tripId !== undefined && (typeof tripId !== 'string' || !tripId || tripId.length > 200)) || !Array.isArray(history) || history.length > 20 || history.some((item: any) => !item || !['user', 'assistant'].includes(item.role) || typeof item.content !== 'string' || item.content.length > 4000) || (dayIndex !== undefined && (!Number.isInteger(dayIndex) || dayIndex < 0 || dayIndex > 6))) return Response.json({ error: 'Tin nhắn hoặc ngày đang xem chưa hợp lệ.' }, { status: 400 });
 
     const userId = getAuthUserId(req);
     const db = getDb();
     let tripContext: any = null;
 
     if (tripId) {
-      const trip = db.prepare('SELECT title, summary, duration, style, companion, total_cost_estimate, itinerary, highlights, ai_insight, user_id, is_shared FROM trips WHERE id = ?').get(tripId) as any;
+      const trip = db.prepare('SELECT title, summary, duration, style, companion, total_cost_estimate, itinerary, highlights, ai_insight, user_id, is_shared, start_date, status FROM trips WHERE id = ?').get(tripId) as any;
       if (trip && (trip.is_shared || trip.user_id === userId)) {
+        trip.rawItinerary = trip.itinerary;
         try { trip.itinerary = JSON.parse(trip.itinerary || '{}'); } catch { trip.itinerary = null; }
         try { trip.highlights = JSON.parse(trip.highlights || '[]'); } catch { trip.highlights = []; }
         tripContext = trip;
       }
+      if (!tripContext) return Response.json({ error: 'Không tìm thấy hành trình.' }, { status: 404 });
+      if (dayIndex !== undefined && dayIndex >= (tripContext.itinerary?.days?.length || 0)) return Response.json({ error: 'Ngày này không có trong lịch.' }, { status: 400 });
     }
 
     const messages = [
@@ -114,26 +123,33 @@ export async function POST(req: NextRequest) {
     let reply: string;
     let proposal = null;
     if (mutationIntent && tripContext && tripContext.user_id === userId) {
-      const candidate = deterministicProposal(message, tripContext, db) || await customizeTrip(tripContext, message);
+      const candidate = deterministicProposal(message, tripContext, db, dayIndex ?? 0) || await customizeTrip(tripContext, message);
       const candidateItinerary = candidate?.days ? { days: candidate.days } : candidate;
+      const stateRow = db.prepare('SELECT * FROM trip_state WHERE trip_id = ? AND user_id = ?').get(tripId, userId) as any;
+      const state = normalizeTripState(stateRow, tripId, tripContext.itinerary.days);
+      const published = db.prepare("SELECT id, name FROM places WHERE publication_status = 'published'").all() as any[];
+      const guardError = validateTripChange(tripContext.itinerary, candidateItinerary, state, published);
+      if (guardError) return Response.json({ reply: guardError, proposal: null });
       const summary = summarizeChanges(tripContext.itinerary, candidateItinerary);
       if (summary.length) {
         reply = 'Mình đã chuẩn bị một phương án chỉnh lịch. Hãy xem các thay đổi bên dưới và xác nhận trước khi áp dụng.';
-        proposal = { instruction: message, itinerary: candidate, summary };
+        proposal = { instruction: message, itinerary: candidate, summary, expectedItinerary: tripContext.rawItinerary, expectedStateUpdatedAt: stateRow?.updated_at || null };
       } else {
         reply = 'Mình đã hiểu yêu cầu nhưng chưa tạo được thay đổi lịch trình đủ rõ ràng. Bạn hãy nêu cụ thể ngày, địa điểm hoặc thời gian muốn đổi.';
       }
     } else {
-      reply = await chat(messages, tripContext);
+      const owned = tripContext && tripContext.user_id === userId;
+      const state = owned ? normalizeTripState(db.prepare('SELECT * FROM trip_state WHERE trip_id = ? AND user_id = ?').get(tripId, userId), tripId, tripContext.itinerary?.days || []) : null;
+      reply = (tripContext ? progressReply(message, tripContext, state, dayIndex) : null) || groundedPlaceReply(message, db.prepare("SELECT * FROM places WHERE publication_status = 'published'").all() as any[]) || await chat(messages, tripContext);
     }
 
-    if (userId && tripId && tripContext) {
+    if (userId && tripId && tripContext?.user_id === userId) {
       db.prepare('INSERT INTO chat_messages (id, trip_id, user_id, role, content) VALUES (?, ?, ?, ?, ?)').run(uuidv4(), tripId, userId, 'user', message);
       db.prepare('INSERT INTO chat_messages (id, trip_id, user_id, role, content) VALUES (?, ?, ?, ?, ?)').run(uuidv4(), tripId, userId, 'assistant', reply);
     }
 
     return Response.json({ reply, proposal });
-  } catch (err: any) {
-    return Response.json({ error: 'Lỗi trợ lý AI: ' + err.message }, { status: 500 });
+  } catch {
+    return Response.json({ error: 'Chưa xử lý được yêu cầu. Lịch trình hiện tại vẫn được giữ; hãy thử lại.' }, { status: 500 });
   }
 }

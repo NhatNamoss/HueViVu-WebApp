@@ -14,9 +14,10 @@ export async function GET(req: NextRequest) {
 
   const db = getDb();
   const trips = db.prepare(`
-    SELECT id, title, summary, duration, style, companion, total_cost_estimate,
-           status, created_at, start_date, is_shared, like_count, ai_match_score
-    FROM trips WHERE user_id = ? ORDER BY created_at DESC
+    SELECT t.id, t.title, t.summary, t.duration, t.style, t.companion, t.total_cost_estimate,
+           t.status, t.created_at, t.start_date, t.is_shared, t.like_count, t.ai_match_score, s.started_at, s.fatigue
+    FROM trips t LEFT JOIN trip_state s ON s.trip_id = t.id AND s.user_id = t.user_id
+    WHERE t.user_id = ? ORDER BY t.created_at DESC
   `).all(userId) as any[];
   return Response.json(trips.map(trip => ({
     ...trip,
@@ -29,9 +30,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { duration, styles, companion, budget, food, sessionId, startLat, startLng, startDate, pacing } = body;
+    const { duration, styles, companion, budget, food, sessionId, startLat, startLng, startDate, pacing, indoorPreferred } = body;
     const durationDays = duration === '5+' ? 5 : Number(duration);
     const normalizedBudget = Number(budget) > 0 && Number(budget) < 10000 ? Number(budget) * 1000 : Number(budget);
+    if (indoorPreferred !== undefined && typeof indoorPreferred !== 'boolean') return Response.json({ error: 'Lựa chọn không gian trong nhà chưa hợp lệ.' }, { status: 400 });
 
     if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 7 || !Array.isArray(styles) || styles.length < 1 || styles.length > 12 || styles.some(style => typeof style !== 'string' || !style.trim() || style.length > 100) || !['solo', 'couple', 'family', 'friends'].includes(companion) || !Number.isFinite(normalizedBudget) || normalizedBudget <= 0 || normalizedBudget > 100000000 || (food !== undefined && (!Array.isArray(food) || food.length > 20 || food.some(item => typeof item !== 'string' || item.length > 100))) || (pacing !== undefined && !['relaxed', 'balanced', 'packed'].includes(pacing))) {
       return Response.json({ error: 'Hãy chọn từ 1 đến 7 ngày, sở thích, người đi cùng và ngân sách hợp lệ.' }, { status: 400 });
@@ -71,7 +73,7 @@ export async function POST(req: NextRequest) {
     }
 
     const draftItinerary = generateAstarTrip({
-      duration: durationDays, styles, companion, budget: normalizedBudget, food: food || [], startLat, startLng, startDate, pacing,
+      duration: durationDays, styles, companion, budget: normalizedBudget, food: food || [], startLat, startLng, startDate, pacing, indoorPreferred,
       visitedPlaceIds: userContext?.visited_place_ids || [],
       avoidPlaceIds: userContext?.skipped_place_ids || [],
     });
